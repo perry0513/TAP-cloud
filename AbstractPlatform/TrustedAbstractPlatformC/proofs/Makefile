@@ -2,7 +2,7 @@ COMMON_SOURCE=../../../Common/common-types.ucl
 AP_SOURCE=./../modules/ap-types.ucl
 CACHE_SOURCE=./../modules/tap-mod-cache.ucl
 CPU_SOURCES=$(COMMON_SOURCE) $(AP_SOURCE) $(CACHE_SOURCE) ./../modules/tap-mod-cpu.ucl
-TAP_OP_SOURCE=./../modules/tap-mod-clone.ucl ./../modules/tap-mod-destroy.ucl ./../modules/tap-mod-enter.ucl ./../modules/tap-mod-exit.ucl ./../modules/tap-mod-launch.ucl ./../modules/tap-mod-pause.ucl ./../modules/tap-mod-resume.ucl ./../modules/tap-mod-snapshot.ucl ./../modules/tap-mod-block-memory-region.ucl ./../modules/tap-mod-release-memory-region.ucl
+TAP_OP_SOURCE=./../modules/tap-mod-destroy.ucl ./../modules/tap-mod-enter.ucl ./../modules/tap-mod-exit.ucl ./../modules/tap-mod-launch.ucl ./../modules/tap-mod-pause.ucl ./../modules/tap-mod-resume.ucl ./../modules/tap-mod-block-memory-region.ucl ./../modules/tap-mod-release-memory-region.ucl # ./../modules/tap-mod-clone.ucl ./../modules/tap-mod-snapshot.ucl
 TAP_SOURCES=$(CPU_SOURCES) $(TAP_OP_SOURCE) ./../modules/tap-mod.ucl 
 PROOF_SOURCES=$(TAP_SOURCES) ./proof-common.ucl
 
