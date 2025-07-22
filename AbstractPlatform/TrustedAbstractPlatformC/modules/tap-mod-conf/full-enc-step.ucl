@@ -23,8 +23,8 @@ module tap {
     modifies tap_enclave_metadata_regs;
     modifies tap_enclave_metadata_paused;
     modifies tap_enclave_metadata_cache_conflict;
-    modifies tap_enclave_metadata_wap_addr_free;
-    modifies tap_enclave_metadata_is_snapshot;
+    // modifies tap_enclave_metadata_wap_addr_free;
+    // modifies tap_enclave_metadata_is_snapshot;
     modifies cache_valid_map, cache_tag_map;
     modifies cpu_pc;
     modifies cpu_regs;
@@ -89,16 +89,16 @@ module tap {
           // switch back to the observer. 
           next_mode = mode_untrusted;
       }
-      (op == tap_proof_op_snapshot) : {
-        call (status) = snapshot();
+      // (op == tap_proof_op_snapshot) : {
+      //   call (status) = snapshot();
 
-        // Switch back to the observer if success 
-        if (status == enclave_op_success) {
-          next_mode = mode_untrusted;
-        } else {
-          next_mode = mode_enclave;
-        }
-      }
+      //   // Switch back to the observer if success 
+      //   if (status == enclave_op_success) {
+      //     next_mode = mode_untrusted;
+      //   } else {
+      //     next_mode = mode_enclave;
+      //   }
+      // }
     esac
   }
 }

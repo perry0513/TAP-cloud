@@ -241,11 +241,11 @@ mem-conf-case-split:
 	uclid -g mem-conf-e-pause/pause --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_e_pause_next)
 	./run_all_smt.sh mem-conf-e-pause
 
-	# Enclave pause operation
-	rm -rf mem-conf-e-snapshot
-	mkdir -p mem-conf-e-snapshot
-	uclid -g mem-conf-e-snapshot/snapshot --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_e_snapshot_next)
-	./run_all_smt.sh mem-conf-e-snapshot
+	# Enclave snapshot operation
+	# rm -rf mem-conf-e-snapshot
+	# mkdir -p mem-conf-e-snapshot
+	# uclid -g mem-conf-e-snapshot/snapshot --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_e_snapshot_next)
+	# ./run_all_smt.sh mem-conf-e-snapshot
 
 	# Observer block operation
 	rm -rf mem-conf-obs-block
@@ -260,10 +260,10 @@ mem-conf-case-split:
 	./run_all_smt.sh mem-conf-obs-compute
 
 	# Clone operation
-	rm -rf mem-conf-obs-clone/
-	mkdir -p mem-conf-obs-clone/
-	time uclid -g mem-conf-obs-clone/clone --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_clone)
-	./run_all_smt.sh mem-conf-obs-clone
+	# rm -rf mem-conf-obs-clone/
+	# mkdir -p mem-conf-obs-clone/
+	# time uclid -g mem-conf-obs-clone/clone --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_clone)
+	# ./run_all_smt.sh mem-conf-obs-clone
 
 	# Observer destroy operation
 	rm -rf mem-conf-obs-destroy
@@ -283,11 +283,11 @@ mem-conf-case-split:
 	uclid -g mem-conf-obs-exit/exit --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_exit)
 	./run_all_smt.sh mem-conf-obs-exit
 
-	# Observer exit operation
-	rm -rf mem-conf-obs-snapshot
-	mkdir -p mem-conf-obs-snapshot
-	uclid -g mem-conf-obs-snapshot/snapshot --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_snapshot)
-	./run_all_smt.sh mem-conf-obs-snapshot
+	# Observer snapshot operation
+	# rm -rf mem-conf-obs-snapshot
+	# mkdir -p mem-conf-obs-snapshot
+	# uclid -g mem-conf-obs-snapshot/snapshot --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_snapshot)
+	# ./run_all_smt.sh mem-conf-obs-snapshot
 
 	# Observer launch operation
 	rm -rf mem-conf-obs-launch

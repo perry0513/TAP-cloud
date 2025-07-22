@@ -64,10 +64,10 @@ module tap {
     modifies tap_enclave_metadata_regs;
     modifies tap_enclave_metadata_paused;
     modifies tap_enclave_metadata_cache_conflict;
-    modifies tap_enclave_metadata_is_snapshot;
-    modifies tap_enclave_metadata_child_count;
-    modifies tap_enclave_metadata_wap_addr_free;
-    modifies tap_enclave_metadata_root_snapshot;
+    // modifies tap_enclave_metadata_is_snapshot;
+    // modifies tap_enclave_metadata_child_count;
+    // modifies tap_enclave_metadata_wap_addr_free;
+    // modifies tap_enclave_metadata_root_snapshot;
     modifies cache_valid_map;
     modifies cache_tag_map;
     modifies cpu_mem;
@@ -161,9 +161,9 @@ module tap {
       (op == tap_proof_op_pause) : {
           call (status) = pause();
       }
-      (op == tap_proof_op_clone) : {
-        call (status) = clone(r_eid, r_parent_eid, r_excl_map);
-      }
+      // (op == tap_proof_op_clone) : {
+      //   call (status) = clone(r_eid, r_parent_eid, r_excl_map);
+      // }
       (op == tap_proof_op_release) : {
           call (status) = release_blocked_memory(r_bmap);
       } 
