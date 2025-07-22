@@ -9,7 +9,7 @@ from multiprocessing import Manager
 from threading import Lock
 
 # === CONFIGURATION ===
-COMMAND = "cvc4 -q --lang smt2 --force-logic=ALL --incremental"
+COMMAND = "cvc5 -q --lang smt2 --force-logic=ALL --incremental"
 MAX_WORKERS = 4
 OUTPUT_CSV = "results.csv"
 PROGRESS_UPDATE_INTERVAL = 0.5
