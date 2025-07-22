@@ -13,12 +13,12 @@ module tap {
     ensures  (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
                 (valid_enclave_id(e) && !tap_enclave_metadata_valid[e]) ==> 
                     (cpu_owner_map[pa] != e));
-    requires (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
-              tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_owner_map[pa] == e);
-    ensures (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
-              tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_owner_map[pa] == e);
-    requires (forall (e :tap_enclave_id_t) :: tap_enclave_metadata_child_count[e] >= 0);
-    ensures (forall (e :tap_enclave_id_t) :: tap_enclave_metadata_child_count[e] >= 0);
+    // requires (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
+    //           tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_owner_map[pa] == e);
+    // ensures (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
+    //           tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_owner_map[pa] == e);
+    // requires (forall (e :tap_enclave_id_t) :: tap_enclave_metadata_child_count[e] >= 0);
+    // ensures (forall (e :tap_enclave_id_t) :: tap_enclave_metadata_child_count[e] >= 0);
 
     //-----------------------------------------------------------------------//
     // Success condition                                                     //
@@ -42,42 +42,42 @@ module tap {
     //-----------------------------------------------------------------------//
     // Changes to the free map                                               //
     //-----------------------------------------------------------------------//
-    ensures (forall (e : tap_enclave_id_t) :: (e != tap_null_enc_id && e != tap_blocked_enc_id) ==>
-      (tap_enclave_metadata_wap_addr_free[e] == old(tap_enclave_metadata_wap_addr_free)[e]));
-    ensures (status != enclave_op_success) ==> 
-      tap_enclave_metadata_wap_addr_free == old(tap_enclave_metadata_wap_addr_free);
-    ensures (status == enclave_op_success) ==>
-      (forall (p : wap_addr_t) :: 
-          if (bmap[p])
-          then (!tap_enclave_metadata_wap_addr_free[tap_null_enc_id][p] && 
-                tap_enclave_metadata_wap_addr_free[tap_blocked_enc_id][p])
-          else (tap_enclave_metadata_wap_addr_free[tap_null_enc_id][p] == old(tap_enclave_metadata_wap_addr_free)[tap_null_enc_id][p] &&
-                tap_enclave_metadata_wap_addr_free[tap_blocked_enc_id][p] == old(tap_enclave_metadata_wap_addr_free)[tap_blocked_enc_id][p]));
+    // ensures (forall (e : tap_enclave_id_t) :: (e != tap_null_enc_id && e != tap_blocked_enc_id) ==>
+    //   (tap_enclave_metadata_wap_addr_free[e] == old(tap_enclave_metadata_wap_addr_free)[e]));
+    // ensures (status != enclave_op_success) ==> 
+    //   tap_enclave_metadata_wap_addr_free == old(tap_enclave_metadata_wap_addr_free);
+    // ensures (status == enclave_op_success) ==>
+    //   (forall (p : wap_addr_t) :: 
+    //       if (bmap[p])
+    //       then (!tap_enclave_metadata_wap_addr_free[tap_null_enc_id][p] && 
+    //             tap_enclave_metadata_wap_addr_free[tap_blocked_enc_id][p])
+    //       else (tap_enclave_metadata_wap_addr_free[tap_null_enc_id][p] == old(tap_enclave_metadata_wap_addr_free)[tap_null_enc_id][p] &&
+    //             tap_enclave_metadata_wap_addr_free[tap_blocked_enc_id][p] == old(tap_enclave_metadata_wap_addr_free)[tap_blocked_enc_id][p]));
 
     //-----------------------------------------------------------------------//
     // Cerberus specifications                                               //
     //-----------------------------------------------------------------------//
 
     // An invalid enclave cannot be a root snapshot of any enclave
-    requires (forall (e: tap_enclave_id_t, e_rs: tap_enclave_id_t) ::
-          ((valid_enclave_id(e) &&
-            tap_enclave_metadata_valid[e] &&
-            !tap_enclave_metadata_valid[e_rs] &&
-            e_rs != tap_invalid_enc_id) ==> tap_enclave_metadata_root_snapshot[e] != e_rs));
-    ensures (forall (e: tap_enclave_id_t, e_rs: tap_enclave_id_t) ::
-          ((valid_enclave_id(e) &&
-            tap_enclave_metadata_valid[e] &&
-            !tap_enclave_metadata_valid[e_rs] &&
-            e_rs != tap_invalid_enc_id) ==> tap_enclave_metadata_root_snapshot[e] != e_rs));
+    // requires (forall (e: tap_enclave_id_t, e_rs: tap_enclave_id_t) ::
+    //       ((valid_enclave_id(e) &&
+    //         tap_enclave_metadata_valid[e] &&
+    //         !tap_enclave_metadata_valid[e_rs] &&
+    //         e_rs != tap_invalid_enc_id) ==> tap_enclave_metadata_root_snapshot[e] != e_rs));
+    // ensures (forall (e: tap_enclave_id_t, e_rs: tap_enclave_id_t) ::
+    //       ((valid_enclave_id(e) &&
+    //         tap_enclave_metadata_valid[e] &&
+    //         !tap_enclave_metadata_valid[e_rs] &&
+    //         e_rs != tap_invalid_enc_id) ==> tap_enclave_metadata_root_snapshot[e] != e_rs));
 
     // The root of the null enclave is invalid
-    requires tap_enclave_metadata_root_snapshot[tap_null_enc_id] == tap_invalid_enc_id;
-    ensures  tap_enclave_metadata_root_snapshot[tap_null_enc_id] == tap_invalid_enc_id;
+    // requires tap_enclave_metadata_root_snapshot[tap_null_enc_id] == tap_invalid_enc_id;
+    // ensures  tap_enclave_metadata_root_snapshot[tap_null_enc_id] == tap_invalid_enc_id;
 
     //-----------------------------------------------------------------------//
     // Modifies statements                                                   //
     //-----------------------------------------------------------------------//
-    modifies tap_enclave_metadata_wap_addr_free;
+    // modifies tap_enclave_metadata_wap_addr_free;
     modifies cpu_owner_map;
   {
     var pa : wap_addr_t;
@@ -117,49 +117,49 @@ module tap {
                     (if (LT_wapa(p, pa) && bmap[p])
                          then cpu_owner_map[p] == tap_blocked_enc_id
                          else cpu_owner_map[p] == old(cpu_owner_map)[p]));
-        invariant (forall (p : wap_addr_t) ::
-                    if (LT_wapa(p, pa) && bmap[p])
-                        then (tap_enclave_metadata_wap_addr_free[tap_null_enc_id][p] == false)
-                        else (tap_enclave_metadata_wap_addr_free[tap_null_enc_id][p] == old(tap_enclave_metadata_wap_addr_free)[tap_null_enc_id][p]));
-         invariant (forall (p : wap_addr_t) ::
-                    if (LT_wapa(p, pa) && bmap[p])
-                        then (tap_enclave_metadata_wap_addr_free[tap_blocked_enc_id][p] == true)
-                        else (tap_enclave_metadata_wap_addr_free[tap_blocked_enc_id][p] == old(tap_enclave_metadata_wap_addr_free)[tap_blocked_enc_id][p]));
-         invariant (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
-                tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_owner_map[pa] == e);
-         invariant (forall (e : tap_enclave_id_t) :: (e != tap_null_enc_id && e != tap_blocked_enc_id) ==>
-          (tap_enclave_metadata_wap_addr_free[e] == old(tap_enclave_metadata_wap_addr_free)[e]));
+        // invariant (forall (p : wap_addr_t) ::
+        //             if (LT_wapa(p, pa) && bmap[p])
+        //                 then (tap_enclave_metadata_wap_addr_free[tap_null_enc_id][p] == false)
+        //                 else (tap_enclave_metadata_wap_addr_free[tap_null_enc_id][p] == old(tap_enclave_metadata_wap_addr_free)[tap_null_enc_id][p]));
+        // invariant (forall (p : wap_addr_t) ::
+        //             if (LT_wapa(p, pa) && bmap[p])
+        //                 then (tap_enclave_metadata_wap_addr_free[tap_blocked_enc_id][p] == true)
+        //                 else (tap_enclave_metadata_wap_addr_free[tap_blocked_enc_id][p] == old(tap_enclave_metadata_wap_addr_free)[tap_blocked_enc_id][p]));
+        // invariant (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
+        //         tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_owner_map[pa] == e);
+        // invariant (forall (e : tap_enclave_id_t) :: (e != tap_null_enc_id && e != tap_blocked_enc_id) ==>
+        //   (tap_enclave_metadata_wap_addr_free[e] == old(tap_enclave_metadata_wap_addr_free)[e]));
 
       {
         if (bmap[pa]) {
-          var null_wap_free: [wap_addr_t]boolean;
-          var blocked_wap_free: [wap_addr_t]boolean;
+          // var null_wap_free: [wap_addr_t]boolean;
+          // var blocked_wap_free: [wap_addr_t]boolean;
           call update_cpu_owner_map(pa, tap_blocked_enc_id);
 
-          null_wap_free = tap_enclave_metadata_wap_addr_free[tap_null_enc_id];
-          null_wap_free[pa] = false;
-          tap_enclave_metadata_wap_addr_free[tap_null_enc_id] = null_wap_free;
+          // null_wap_free = tap_enclave_metadata_wap_addr_free[tap_null_enc_id];
+          // null_wap_free[pa] = false;
+          // tap_enclave_metadata_wap_addr_free[tap_null_enc_id] = null_wap_free;
 
-          blocked_wap_free = tap_enclave_metadata_wap_addr_free[tap_blocked_enc_id];
-          blocked_wap_free[pa] = true;
-          tap_enclave_metadata_wap_addr_free[tap_blocked_enc_id] = blocked_wap_free;
+          // blocked_wap_free = tap_enclave_metadata_wap_addr_free[tap_blocked_enc_id];
+          // blocked_wap_free[pa] = true;
+          // tap_enclave_metadata_wap_addr_free[tap_blocked_enc_id] = blocked_wap_free;
 
         }
         pa = PLUS_wapa(pa, k1_wap_addr_t);
       }
       // assert pa == kmax_wap_addr_t;
       if (bmap[pa]) {
-          var null_wap_free: [wap_addr_t]boolean;
-          var blocked_wap_free: [wap_addr_t]boolean;
+          // var null_wap_free: [wap_addr_t]boolean;
+          // var blocked_wap_free: [wap_addr_t]boolean;
           call update_cpu_owner_map(pa, tap_blocked_enc_id);
 
-          null_wap_free = tap_enclave_metadata_wap_addr_free[tap_null_enc_id];
-          null_wap_free[pa] = false;
-          tap_enclave_metadata_wap_addr_free[tap_null_enc_id] = null_wap_free;
+          // null_wap_free = tap_enclave_metadata_wap_addr_free[tap_null_enc_id];
+          // null_wap_free[pa] = false;
+          // tap_enclave_metadata_wap_addr_free[tap_null_enc_id] = null_wap_free;
 
-          blocked_wap_free = tap_enclave_metadata_wap_addr_free[tap_blocked_enc_id];
-          blocked_wap_free[pa] = true;
-          tap_enclave_metadata_wap_addr_free[tap_blocked_enc_id] = blocked_wap_free;
+          // blocked_wap_free = tap_enclave_metadata_wap_addr_free[tap_blocked_enc_id];
+          // blocked_wap_free[pa] = true;
+          // tap_enclave_metadata_wap_addr_free[tap_blocked_enc_id] = blocked_wap_free;
       }
 
       assert (forall (p : wap_addr_t) ::

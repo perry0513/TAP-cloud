@@ -19,12 +19,13 @@ module tap {
     //----------------------------------------------------------------------//
     ensures ((valid_enclave_id(eid))                   &&
              (tap_enclave_metadata_valid[eid])         &&
-             (old(cpu_enclave_id) == tap_null_enc_id)  &&
-             !tap_enclave_metadata_is_snapshot[eid]) ==> (status == enclave_op_success);
-    ensures ((!valid_enclave_id(eid))                  ||
-             (!tap_enclave_metadata_valid[eid])        ||
-             (old(cpu_enclave_id) != tap_null_enc_id)  ||
-             tap_enclave_metadata_is_snapshot[eid]) ==> (status == enclave_op_invalid_arg);
+             (old(cpu_enclave_id) == tap_null_enc_id)) //  &&
+            //  !tap_enclave_metadata_is_snapshot[eid]) 
+                <==> (status == enclave_op_success);
+    // ensures ((!valid_enclave_id(eid))                  ||
+    //          (!tap_enclave_metadata_valid[eid])        ||
+    //          (old(cpu_enclave_id) != tap_null_enc_id)  ||
+    //          tap_enclave_metadata_is_snapshot[eid]) ==> (status == enclave_op_invalid_arg);
 
     //----------------------------------------------------------------------//
     // The status can only be success and invalid arguement                 //
@@ -78,8 +79,8 @@ module tap {
     // 4. Enclave is not a snapshot
     if (!valid_enclave_id(eid)              ||
         !tap_enclave_metadata_valid[eid]    ||
-        cpu_enclave_id != tap_null_enc_id   ||
-        tap_enclave_metadata_is_snapshot[eid])
+        cpu_enclave_id != tap_null_enc_id) //   ||
+        // tap_enclave_metadata_is_snapshot[eid])
     {
       status = enclave_op_invalid_arg;
     } else {

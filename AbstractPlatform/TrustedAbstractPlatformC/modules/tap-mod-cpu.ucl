@@ -178,7 +178,7 @@ module tap {
       owner_eid = cpu_owner_map[paddr];
 
       if (owner_eid != tap_null_enc_id &&
-          owner_eid != tap_enclave_metadata_root_snapshot[cpu_enclave_id] &&
+          // owner_eid != tap_enclave_metadata_root_snapshot[cpu_enclave_id] &&
           owner_eid != cpu_enclave_id)
       {
         excp = excp_os_protection_fault; 
@@ -191,10 +191,10 @@ module tap {
 
         // Sanity check: The PA is owned by the running enclave or its root snapshot
         assert (cpu_owner_map[paddr] == cpu_enclave_id ||
-                cpu_owner_map[paddr] == tap_null_enc_id ||
-                (valid_enclave_id(tap_enclave_metadata_root_snapshot[cpu_enclave_id]) &&
-                  tap_enclave_metadata_valid[tap_enclave_metadata_root_snapshot[cpu_enclave_id]] &&
-                  cpu_owner_map[paddr] == tap_enclave_metadata_root_snapshot[cpu_enclave_id]));
+                cpu_owner_map[paddr] == tap_null_enc_id); // ||
+                // (valid_enclave_id(tap_enclave_metadata_root_snapshot[cpu_enclave_id]) &&
+                //   tap_enclave_metadata_valid[tap_enclave_metadata_root_snapshot[cpu_enclave_id]] &&
+                //   cpu_owner_map[paddr] == tap_enclave_metadata_root_snapshot[cpu_enclave_id]));
         
         // Perform load
         data = cpu_mem[paddr];
@@ -248,7 +248,7 @@ module tap {
       owner_eid = cpu_owner_map[paddr];
 
       if (owner_eid != tap_null_enc_id &&
-          (valid_enclave_id(tap_enclave_metadata_root_snapshot[cpu_enclave_id]) && owner_eid != tap_enclave_metadata_root_snapshot[cpu_enclave_id]) &&
+          // (valid_enclave_id(tap_enclave_metadata_root_snapshot[cpu_enclave_id]) && owner_eid != tap_enclave_metadata_root_snapshot[cpu_enclave_id]) &&
           owner_eid != cpu_enclave_id)
       {
         excp = excp_tp_protection_fault;
@@ -277,12 +277,12 @@ module tap {
 
     requires (forall (p : wap_addr_t) :: cpu_owner_map[p] != tap_invalid_enc_id);
     ensures (forall (p : wap_addr_t) :: cpu_owner_map[p] != tap_invalid_enc_id);
-    requires (forall (eid : tap_enclave_id_t) :: valid_enclave_id(eid) ==> tap_enclave_metadata_root_snapshot[eid] != eid);
-    ensures (forall (eid : tap_enclave_id_t) :: valid_enclave_id(eid) ==> tap_enclave_metadata_root_snapshot[eid] != eid);
-    requires (forall (eid : tap_enclave_id_t, pa : wap_addr_t) :: tap_enclave_metadata_wap_addr_free[eid][pa] ==> cpu_owner_map[pa] == eid);
-    ensures (forall (eid : tap_enclave_id_t, pa : wap_addr_t) :: tap_enclave_metadata_wap_addr_free[eid][pa] ==> cpu_owner_map[pa] == eid);
-    requires tap_enclave_metadata_root_snapshot[tap_null_enc_id] == tap_invalid_enc_id;
-    ensures tap_enclave_metadata_root_snapshot[tap_null_enc_id] == tap_invalid_enc_id;
+    // requires (forall (eid : tap_enclave_id_t) :: valid_enclave_id(eid) ==> tap_enclave_metadata_root_snapshot[eid] != eid);
+    // ensures (forall (eid : tap_enclave_id_t) :: valid_enclave_id(eid) ==> tap_enclave_metadata_root_snapshot[eid] != eid);
+    // requires (forall (eid : tap_enclave_id_t, pa : wap_addr_t) :: tap_enclave_metadata_wap_addr_free[eid][pa] ==> cpu_owner_map[pa] == eid);
+    // ensures (forall (eid : tap_enclave_id_t, pa : wap_addr_t) :: tap_enclave_metadata_wap_addr_free[eid][pa] ==> cpu_owner_map[pa] == eid);
+    // requires tap_enclave_metadata_root_snapshot[tap_null_enc_id] == tap_invalid_enc_id;
+    // ensures tap_enclave_metadata_root_snapshot[tap_null_enc_id] == tap_invalid_enc_id;
     
     ensures (excp != excp_none ==> cpu_mem == old(cpu_mem));
     ensures (excp != excp_none) ==> (cpu_addr_valid == old(cpu_addr_valid));
@@ -295,8 +295,8 @@ module tap {
               ==> (cpu_addr_valid[vaddr] == tap_set_addr_perm_a(old(cpu_addr_valid)[vaddr]));
     ensures (!tap_addr_perm_w(old(cpu_addr_valid)[vaddr]) ||
              (cpu_owner_map[cpu_addr_map[vaddr]] != tap_null_enc_id &&
-              cpu_owner_map[cpu_addr_map[vaddr]] != cpu_enclave_id &&
-              cpu_owner_map[cpu_addr_map[vaddr]] != tap_enclave_metadata_root_snapshot[cpu_enclave_id]))
+              cpu_owner_map[cpu_addr_map[vaddr]] != cpu_enclave_id)) // &&
+              // cpu_owner_map[cpu_addr_map[vaddr]] != tap_enclave_metadata_root_snapshot[cpu_enclave_id]))
             ==> (hit == false);
     ensures (forall (p : wap_addr_t, w : cache_way_index_t) ::
               (paddr2set(p) != paddr2set(cpu_addr_map[vaddr]) || w != repl_way)
@@ -312,7 +312,7 @@ module tap {
     modifies cpu_addr_map;
     modifies cache_valid_map;
     modifies cache_tag_map;
-    modifies tap_enclave_metadata_wap_addr_free;
+    // modifies tap_enclave_metadata_wap_addr_free;
     modifies tap_enclave_metadata_addr_map;
     modifies tap_enclave_metadata_addr_valid;
   {   
@@ -336,8 +336,8 @@ module tap {
 
       // Allow a child to COW its parents memory
       if (owner_eid != tap_null_enc_id &&
-         (owner_eid != cpu_enclave_id &&
-          owner_eid != tap_enclave_metadata_root_snapshot[cpu_enclave_id]))
+         (owner_eid != cpu_enclave_id)) // &&
+          // owner_eid != tap_enclave_metadata_root_snapshot[cpu_enclave_id]))
       {
         excp = excp_tp_protection_fault;
       }
@@ -345,51 +345,51 @@ module tap {
 
     if (excp == excp_none) {
       // Check if the owner is the root snapshot
-      if (owner_eid == tap_enclave_metadata_root_snapshot[cpu_enclave_id]) {
-        // Do COW
-        var found: boolean;
-        var new_paddr: wap_addr_t;
-        var wap_addr_free_map : [wap_addr_t]boolean;
+      // if (owner_eid == tap_enclave_metadata_root_snapshot[cpu_enclave_id]) {
+      //   // Do COW
+      //   var found: boolean;
+      //   var new_paddr: wap_addr_t;
+      //   var wap_addr_free_map : [wap_addr_t]boolean;
 
-        // Sanity check
-        assert (cpu_enclave_id != tap_null_enc_id);
-        assert (owner_eid != cpu_enclave_id);
+      //   // Sanity check
+      //   assert (cpu_enclave_id != tap_null_enc_id);
+      //   assert (owner_eid != cpu_enclave_id);
 
-        // Find a free PA
-        new_paddr = uf_next_free_pa(tap_enclave_metadata_wap_addr_free[cpu_enclave_id]);
-        found = (tap_enclave_metadata_wap_addr_free[cpu_enclave_id][new_paddr] && cpu_owner_map[new_paddr] == cpu_enclave_id);
-        if (found) {
-          var tmp_addr_map: [vaddr_t]wap_addr_t;
+      //   // Find a free PA
+      //   new_paddr = uf_next_free_pa(tap_enclave_metadata_wap_addr_free[cpu_enclave_id]);
+      //   found = (tap_enclave_metadata_wap_addr_free[cpu_enclave_id][new_paddr] && cpu_owner_map[new_paddr] == cpu_enclave_id);
+      //   if (found) {
+      //     var tmp_addr_map: [vaddr_t]wap_addr_t;
 
-          // Mark as not free memory
-          wap_addr_free_map = tap_enclave_metadata_wap_addr_free[cpu_enclave_id];
-          wap_addr_free_map[new_paddr] = false;
-          tap_enclave_metadata_wap_addr_free[cpu_enclave_id] = wap_addr_free_map;
+      //     // Mark as not free memory
+      //     wap_addr_free_map = tap_enclave_metadata_wap_addr_free[cpu_enclave_id];
+      //     wap_addr_free_map[new_paddr] = false;
+      //     tap_enclave_metadata_wap_addr_free[cpu_enclave_id] = wap_addr_free_map;
 
-          // Remap the VA to the free PA
-          cpu_addr_map[vaddr] = new_paddr;
+      //     // Remap the VA to the free PA
+      //     cpu_addr_map[vaddr] = new_paddr;
 
-          // Update addr_map in metadata
-          tap_enclave_metadata_addr_map[cpu_enclave_id] = cpu_addr_map;
+      //     // Update addr_map in metadata
+      //     tap_enclave_metadata_addr_map[cpu_enclave_id] = cpu_addr_map;
           
-          // Update accessed bit
-          cpu_addr_valid[vaddr] = tap_set_addr_perm_a(cpu_addr_valid[vaddr]);
+      //     // Update accessed bit
+      //     cpu_addr_valid[vaddr] = tap_set_addr_perm_a(cpu_addr_valid[vaddr]);
           
-          // Update addr_valid in metadata
-          tap_enclave_metadata_addr_valid[cpu_enclave_id] = cpu_addr_valid;
+      //     // Update addr_valid in metadata
+      //     tap_enclave_metadata_addr_valid[cpu_enclave_id] = cpu_addr_valid;
           
-          // Perform store
-          cpu_mem[new_paddr] = data;
+      //     // Perform store
+      //     cpu_mem[new_paddr] = data;
           
-          // Update cache
-          if (cpu_cache_enabled) {
-              call (hit, hit_way) = query_cache(new_paddr, repl_way);
-          }
-        } else {
-          // TODO: This means that we couldn't find any free physical memory
-          excp = excp_out_of_memory_fault;
-        }
-      } else {
+      //     // Update cache
+      //     if (cpu_cache_enabled) {
+      //         call (hit, hit_way) = query_cache(new_paddr, repl_way);
+      //     }
+      //   } else {
+      //     // TODO: This means that we couldn't find any free physical memory
+      //     excp = excp_out_of_memory_fault;
+      //   }
+      // } else {
         // The owner is not the root snapshot, so just perform the store
 
         // Sanity check
@@ -410,7 +410,7 @@ module tap {
         if (cpu_cache_enabled) {
           call (hit, hit_way) = query_cache(paddr, repl_way);
         }
-      }
+      // }
     }
     assert (forall (v : vaddr_t) ::
               (v != vaddr) ==> (cpu_addr_valid[v] == old(cpu_addr_valid)[v])); 

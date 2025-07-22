@@ -92,16 +92,17 @@ module tap {
     ensures (forall (e: tap_enclave_id_t) ::
               ((forall (va: vaddr_t) ::
                 ((valid_enclave_id(e) && tap_enclave_metadata_valid[e] && tap_enclave_metadata_addr_excl[e][va]) ==>
-                  (cpu_owner_map[old(tap_enclave_metadata_addr_map)[e][va]] == e ||
-                   (valid_enclave_id(tap_enclave_metadata_root_snapshot[e]) &&
-                    tap_enclave_metadata_valid[tap_enclave_metadata_root_snapshot[e]] &&
-                    cpu_owner_map[old(tap_enclave_metadata_addr_map)[e][va]] == tap_enclave_metadata_root_snapshot[e])))) ==>
+                  (cpu_owner_map[old(tap_enclave_metadata_addr_map)[e][va]] == e))) // ||
+                  //  (valid_enclave_id(tap_enclave_metadata_root_snapshot[e]) &&
+                  //   tap_enclave_metadata_valid[tap_enclave_metadata_root_snapshot[e]] &&
+                  //   cpu_owner_map[old(tap_enclave_metadata_addr_map)[e][va]] == tap_enclave_metadata_root_snapshot[e])))) 
+                    ==>
                (forall (va: vaddr_t) ::
                 ((valid_enclave_id(e) && tap_enclave_metadata_valid[e] && tap_enclave_metadata_addr_excl[e][va]) ==>
-                  (cpu_owner_map[tap_enclave_metadata_addr_map[e][va]] == e ||
-                   (valid_enclave_id(tap_enclave_metadata_root_snapshot[e]) &&
-                    tap_enclave_metadata_valid[tap_enclave_metadata_root_snapshot[e]] &&
-                    cpu_owner_map[tap_enclave_metadata_addr_map[e][va]] == tap_enclave_metadata_root_snapshot[e]))))));
+                  (cpu_owner_map[tap_enclave_metadata_addr_map[e][va]] == e))))); // ||
+                  //  (valid_enclave_id(tap_enclave_metadata_root_snapshot[e]) &&
+                  //   tap_enclave_metadata_valid[tap_enclave_metadata_root_snapshot[e]] &&
+                  //   cpu_owner_map[tap_enclave_metadata_addr_map[e][va]] == tap_enclave_metadata_root_snapshot[e]))))));
 
     //-----------------------------------------------------------------------//
     // Modifies statements                                                   //
