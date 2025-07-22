@@ -21,10 +21,10 @@ module tap {
     modifies tap_enclave_metadata_regs;
     modifies tap_enclave_metadata_paused;
     modifies tap_enclave_metadata_cache_conflict;
-    modifies tap_enclave_metadata_is_snapshot;
-    modifies tap_enclave_metadata_child_count;
-    modifies tap_enclave_metadata_root_snapshot;
-    modifies tap_enclave_metadata_wap_addr_free;
+    // modifies tap_enclave_metadata_is_snapshot;
+    // modifies tap_enclave_metadata_child_count;
+    // modifies tap_enclave_metadata_root_snapshot;
+    // modifies tap_enclave_metadata_wap_addr_free;
     modifies cpu_pc;
     modifies cpu_mem;
     modifies cpu_regs;

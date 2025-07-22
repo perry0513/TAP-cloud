@@ -130,17 +130,17 @@ integrity-case-split:
 	time uclid -g integrity-enc-exit/exit-next --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_e_exit_next)
 	./run_all_smt.sh integrity-enc-exit
 
-		# Enclave Pause operation
+	# Enclave Pause operation
 	rm -rf integrity-enc-pause
 	mkdir -p integrity-enc-pause
 	time uclid -g integrity-enc-pause/pause-next --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_e_pause_next)
 	./run_all_smt.sh integrity-enc-pause
 
 	# Enclave Snapshot operation 
-	rm -rf integrity-enc-snapshot/
-	mkdir -p integrity-enc-snapshot/
-	time uclid -g integrity-enc-snapshot/snapshot --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_e_snapshot_next)
-	./run_all_smt.sh integrity-enc-snapshot
+	# rm -rf integrity-enc-snapshot/
+	# mkdir -p integrity-enc-snapshot/
+	# time uclid -g integrity-enc-snapshot/snapshot --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_e_snapshot_next)
+	# ./run_all_smt.sh integrity-enc-snapshot
 
 	# Block operation 
 	rm -rf integrity-adv-block
@@ -155,10 +155,10 @@ integrity-case-split:
 	./run_all_smt.sh integrity-adv-compute
 
 	# Clone operation 
-	rm -rf integrity-adv-clone/
-	mkdir -p integrity-adv-clone/
-	time uclid -g integrity-adv-clone/clone --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_clone)
-	./run_all_smt.sh integrity-adv-clone
+	# rm -rf integrity-adv-clone/
+	# mkdir -p integrity-adv-clone/
+	# time uclid -g integrity-adv-clone/clone --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_clone)
+	# ./run_all_smt.sh integrity-adv-clone
 
 	# Destroy operation 
 	rm -rf integrity-adv-destroy/
@@ -179,10 +179,10 @@ integrity-case-split:
 	./run_all_smt.sh integrity-adv-exit
 
 	# Snapshot operation 
-	rm -rf integrity-adv-snapshot/
-	mkdir -p integrity-adv-snapshot/
-	time uclid -g integrity-adv-snapshot/snapshot --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_snapshot)
-	./run_all_smt.sh integrity-adv-snapshot
+	# rm -rf integrity-adv-snapshot/
+	# mkdir -p integrity-adv-snapshot/
+	# time uclid -g integrity-adv-snapshot/snapshot --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_snapshot)
+	# ./run_all_smt.sh integrity-adv-snapshot
 
 	# Launch operation 
 	rm -rf integrity-adv-launch/

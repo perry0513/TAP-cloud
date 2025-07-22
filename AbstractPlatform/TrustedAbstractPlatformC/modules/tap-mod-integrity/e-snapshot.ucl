@@ -13,8 +13,8 @@ module tap {
     modifies tap_enclave_metadata_pc;
     modifies tap_enclave_metadata_regs;
     modifies tap_enclave_metadata_paused;
-    modifies tap_enclave_metadata_wap_addr_free;
-    modifies tap_enclave_metadata_is_snapshot;
+    // modifies tap_enclave_metadata_wap_addr_free;
+    // modifies tap_enclave_metadata_is_snapshot;
     modifies cpu_pc;
     modifies cpu_regs;
     modifies cpu_mem;

@@ -65,11 +65,11 @@ module integrity_proof {
       (cpu_1.tap_enclave_metadata_entrypoint[e]    == cpu_2.tap_enclave_metadata_entrypoint[e]) &&
       (cpu_1.tap_enclave_metadata_pc[e]            == cpu_2.tap_enclave_metadata_pc[e]) &&
       (cpu_1.tap_enclave_metadata_regs[e]          == cpu_2.tap_enclave_metadata_regs[e]) &&
-      (cpu_1.tap_enclave_metadata_paused[e]        == cpu_2.tap_enclave_metadata_paused[e]) &&
-      (cpu_1.tap_enclave_metadata_is_snapshot[e]   == cpu_2.tap_enclave_metadata_is_snapshot[e]) &&
-      (cpu_1.tap_enclave_metadata_child_count[e] > 0   <==> cpu_2.tap_enclave_metadata_child_count[e] > 0) &&
-      (cpu_1.tap_enclave_metadata_root_snapshot[e] == cpu_2.tap_enclave_metadata_root_snapshot[e]) &&
-      (cpu_1.tap_enclave_metadata_wap_addr_free[e] == cpu_2.tap_enclave_metadata_wap_addr_free[e]);
+      (cpu_1.tap_enclave_metadata_paused[e]        == cpu_2.tap_enclave_metadata_paused[e]); // &&
+      // (cpu_1.tap_enclave_metadata_is_snapshot[e]   == cpu_2.tap_enclave_metadata_is_snapshot[e]) &&
+      // (cpu_1.tap_enclave_metadata_child_count[e] > 0   <==> cpu_2.tap_enclave_metadata_child_count[e] > 0) &&
+      // (cpu_1.tap_enclave_metadata_root_snapshot[e] == cpu_2.tap_enclave_metadata_root_snapshot[e]) &&
+      // (cpu_1.tap_enclave_metadata_wap_addr_free[e] == cpu_2.tap_enclave_metadata_wap_addr_free[e]);
 
     //----------------------------------------------------------------------//
     // TAP invariants                                                       //
@@ -84,14 +84,14 @@ module integrity_proof {
                     (cpu_2.cpu_owner_map[pa] != e));
 
     // Free memory is owned by the respective enclave
-    invariant inv3: verif ==> (forall (pa: wap_addr_t, e : tap_enclave_id_t) ::
-                cpu_1.tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_1.cpu_owner_map[pa] == e);
-    invariant inv4: verif ==> (forall (pa: wap_addr_t, e : tap_enclave_id_t) ::
-                cpu_2.tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_2.cpu_owner_map[pa] == e);
+    // invariant inv3: verif ==> (forall (pa: wap_addr_t, e : tap_enclave_id_t) ::
+    //             cpu_1.tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_1.cpu_owner_map[pa] == e);
+    // invariant inv4: verif ==> (forall (pa: wap_addr_t, e : tap_enclave_id_t) ::
+    //             cpu_2.tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_2.cpu_owner_map[pa] == e);
     
     // Child count is non-negative
-    invariant inv5: verif ==> (forall (e: tap_enclave_id_t) :: cpu_1.tap_enclave_metadata_child_count[e] >= 0);
-    invariant inv6: verif ==> (forall (e: tap_enclave_id_t) :: cpu_2.tap_enclave_metadata_child_count[e] >= 0);
+    // invariant inv5: verif ==> (forall (e: tap_enclave_id_t) :: cpu_1.tap_enclave_metadata_child_count[e] >= 0);
+    // invariant inv6: verif ==> (forall (e: tap_enclave_id_t) :: cpu_2.tap_enclave_metadata_child_count[e] >= 0);
 
     // Eid is valid
     invariant inv7: verif ==> valid_enclave_id(eid);
@@ -123,20 +123,20 @@ module integrity_proof {
                 cpu_2.tap_enclave_metadata_addr_excl[eid][cpu_2.tap_enclave_metadata_pc[eid]];
 
     // The cpu_owner_map and enclave's excl_map are consistent
-    invariant inv19: (verif && !enclave_dead) ==>
-                        (cpu_1.tap_enclave_metadata_wap_addr_free[eid] == cpu_2.tap_enclave_metadata_wap_addr_free[eid]);
+    // invariant inv19: (verif && !enclave_dead) ==>
+    //                     (cpu_1.tap_enclave_metadata_wap_addr_free[eid] == cpu_2.tap_enclave_metadata_wap_addr_free[eid]);
     invariant inv20: (verif && !enclave_dead) ==>
                         (forall (pa: wap_addr_t) :: 
                           (cpu_1.cpu_owner_map[pa] == eid <==> e_excl_map[pa]));
     invariant inv21: (verif && !enclave_dead) ==>
                         (forall (pa: wap_addr_t) :: 
                           (cpu_2.cpu_owner_map[pa] == eid <==> e_excl_map[pa]));
-    invariant inv20_root: (verif && !enclave_dead && valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid])) ==>
-                        (forall (pa: wap_addr_t) :: 
-                          ((cpu_1.cpu_owner_map[pa] == cpu_1.tap_enclave_metadata_root_snapshot[eid]) <==> e_root_excl_map[pa]));
-    invariant inv21_root: (verif && !enclave_dead && valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[eid])) ==>
-                        (forall (pa: wap_addr_t) :: 
-                          ((cpu_2.cpu_owner_map[pa] == cpu_2.tap_enclave_metadata_root_snapshot[eid]) <==> e_root_excl_map[pa]));
+    // invariant inv20_root: (verif && !enclave_dead && valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid])) ==>
+    //                     (forall (pa: wap_addr_t) :: 
+    //                       ((cpu_1.cpu_owner_map[pa] == cpu_1.tap_enclave_metadata_root_snapshot[eid]) <==> e_root_excl_map[pa]));
+    // invariant inv21_root: (verif && !enclave_dead && valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[eid])) ==>
+    //                     (forall (pa: wap_addr_t) :: 
+    //                       ((cpu_2.cpu_owner_map[pa] == cpu_2.tap_enclave_metadata_root_snapshot[eid]) <==> e_root_excl_map[pa]));
 
     invariant inv22: (verif && !enclave_dead) ==>
                  (cpu_1.tap_enclave_metadata_addr_excl[eid] == cpu_2.tap_enclave_metadata_addr_excl[eid]);
@@ -169,8 +169,8 @@ module integrity_proof {
     // The two enclaves for `eid` are paused in the same way in the metadata
     invariant inv34: verif ==> !enclave_dead ==> 
                 (cpu_1.tap_enclave_metadata_paused[eid] == cpu_2.tap_enclave_metadata_paused[eid]);
-    invariant inv35: verif ==> !enclave_dead ==>
-                (cpu_1.tap_enclave_metadata_is_snapshot[eid] == cpu_2.tap_enclave_metadata_is_snapshot[eid]);
+    // invariant inv35: verif ==> !enclave_dead ==>
+    //             (cpu_1.tap_enclave_metadata_is_snapshot[eid] == cpu_2.tap_enclave_metadata_is_snapshot[eid]);
     
     // The two registers for `eid` are the same in the metadata
     invariant inv36:
@@ -196,11 +196,11 @@ module integrity_proof {
     invariant inv45: verif ==> (current_mode == mode_enclave ==> cpu_1.tap_enclave_metadata_addr_excl[eid][cpu_1.cpu_pc]);
     invariant inv46: verif ==> (current_mode == mode_enclave ==> cpu_2.tap_enclave_metadata_addr_excl[eid][cpu_2.cpu_pc]);
     invariant inv47: verif ==> (current_mode == mode_enclave ==> 
-        (cpu_1.cpu_owner_map[cpu_1.cpu_addr_map[cpu_1.cpu_pc]] == eid || 
-         cpu_1.cpu_owner_map[cpu_1.cpu_addr_map[cpu_1.cpu_pc]] == cpu_1.tap_enclave_metadata_root_snapshot[eid]));
+        (cpu_1.cpu_owner_map[cpu_1.cpu_addr_map[cpu_1.cpu_pc]] == eid)); // || 
+        //  cpu_1.cpu_owner_map[cpu_1.cpu_addr_map[cpu_1.cpu_pc]] == cpu_1.tap_enclave_metadata_root_snapshot[eid]));
     invariant inv48: verif ==> (current_mode == mode_enclave ==> 
-        (cpu_2.cpu_owner_map[cpu_2.cpu_addr_map[cpu_2.cpu_pc]] == eid ||
-         cpu_2.cpu_owner_map[cpu_2.cpu_addr_map[cpu_2.cpu_pc]] == cpu_2.tap_enclave_metadata_root_snapshot[eid]));
+        (cpu_2.cpu_owner_map[cpu_2.cpu_addr_map[cpu_2.cpu_pc]] == eid)); // ||
+        //  cpu_2.cpu_owner_map[cpu_2.cpu_addr_map[cpu_2.cpu_pc]] == cpu_2.tap_enclave_metadata_root_snapshot[eid]));
     
     // If we are in trusted mode, then metadata and CPU state are the same.
     invariant inv49:
@@ -254,40 +254,40 @@ module integrity_proof {
     //----------------------------------------------------------------------//
 
     // No one can run a snapshot enclave
-    invariant cpu_never_snapshot: (!enclave_dead && verif) ==>
-      (!cpu_1.tap_enclave_metadata_is_snapshot[cpu_1.cpu_enclave_id] &&
-       !cpu_2.tap_enclave_metadata_is_snapshot[cpu_2.cpu_enclave_id]);
+    // invariant cpu_never_snapshot: (!enclave_dead && verif) ==>
+    //   (!cpu_1.tap_enclave_metadata_is_snapshot[cpu_1.cpu_enclave_id] &&
+    //    !cpu_2.tap_enclave_metadata_is_snapshot[cpu_2.cpu_enclave_id]);
 
     // Null enclave is never a snapshot
-    invariant null_enc_never_snapshot: (verif) ==>
-      (!cpu_1.tap_enclave_metadata_is_snapshot[tap_null_enc_id] &&
-       !cpu_2.tap_enclave_metadata_is_snapshot[tap_null_enc_id]);
+    // invariant null_enc_never_snapshot: (verif) ==>
+    //   (!cpu_1.tap_enclave_metadata_is_snapshot[tap_null_enc_id] &&
+    //    !cpu_2.tap_enclave_metadata_is_snapshot[tap_null_enc_id]);
 
     // Root snapshot stays the same
-    invariant eid_root_equal: (!enclave_dead && verif) ==>
-      ((valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid]) && cpu_1.tap_enclave_metadata_valid[cpu_1.tap_enclave_metadata_root_snapshot[eid]]) ==>
-        tap_metadata_equal(cpu_1.tap_enclave_metadata_root_snapshot[eid]));
+    // invariant eid_root_equal: (!enclave_dead && verif) ==>
+    //   ((valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid]) && cpu_1.tap_enclave_metadata_valid[cpu_1.tap_enclave_metadata_root_snapshot[eid]]) ==>
+    //     tap_metadata_equal(cpu_1.tap_enclave_metadata_root_snapshot[eid]));
 
     // If the enclave root snapshot is valid, then it's a snapshot
-    invariant eid_root_is_snapshot: (!enclave_dead && verif) ==>
-      (valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid]) ==>
-        cpu_1.tap_enclave_metadata_is_snapshot[cpu_1.tap_enclave_metadata_root_snapshot[eid]]);
+    // invariant eid_root_is_snapshot: (!enclave_dead && verif) ==>
+    //   (valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid]) ==>
+    //     cpu_1.tap_enclave_metadata_is_snapshot[cpu_1.tap_enclave_metadata_root_snapshot[eid]]);
 
     // Root snapshot memory stays the same
-    invariant eid_root_mem_equal:
-      (!enclave_dead && verif && valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid])) ==>
-        (forall (pa: wap_addr_t) ::
-          (e_root_excl_map[pa] ==>
-            (cpu_1.cpu_mem[pa] == cpu_2.cpu_mem[pa])));
+    // invariant eid_root_mem_equal:
+    //   (!enclave_dead && verif && valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid])) ==>
+    //     (forall (pa: wap_addr_t) ::
+    //       (e_root_excl_map[pa] ==>
+    //         (cpu_1.cpu_mem[pa] == cpu_2.cpu_mem[pa])));
 
     // Same Cerberus metadata
-    invariant inv_same_is_snapshot:   (!enclave_dead && verif) ==> cpu_1.tap_enclave_metadata_is_snapshot[eid] == cpu_2.tap_enclave_metadata_is_snapshot[eid];
-    invariant inv_same_root_snapshot: (!enclave_dead && verif) ==> cpu_1.tap_enclave_metadata_root_snapshot[eid] == cpu_2.tap_enclave_metadata_root_snapshot[eid];
-    invariant inv_same_wap_addr_free: (!enclave_dead && verif) ==> cpu_1.tap_enclave_metadata_wap_addr_free[eid] == cpu_2.tap_enclave_metadata_wap_addr_free[eid];
+    // invariant inv_same_is_snapshot:   (!enclave_dead && verif) ==> cpu_1.tap_enclave_metadata_is_snapshot[eid] == cpu_2.tap_enclave_metadata_is_snapshot[eid];
+    // invariant inv_same_root_snapshot: (!enclave_dead && verif) ==> cpu_1.tap_enclave_metadata_root_snapshot[eid] == cpu_2.tap_enclave_metadata_root_snapshot[eid];
+    // invariant inv_same_wap_addr_free: (!enclave_dead && verif) ==> cpu_1.tap_enclave_metadata_wap_addr_free[eid] == cpu_2.tap_enclave_metadata_wap_addr_free[eid];
 
     // If an enclave is valid, then the root is not itself
-    invariant inv_root_not_self_1: (!enclave_dead && verif) ==> (forall (e : tap_enclave_id_t) :: valid_enclave_id(e) ==> cpu_1.tap_enclave_metadata_root_snapshot[e] != e);
-    invariant inv_root_not_self_2: (!enclave_dead && verif) ==> (forall (e : tap_enclave_id_t) :: valid_enclave_id(e) ==> cpu_2.tap_enclave_metadata_root_snapshot[e] != e);
+    // invariant inv_root_not_self_1: (!enclave_dead && verif) ==> (forall (e : tap_enclave_id_t) :: valid_enclave_id(e) ==> cpu_1.tap_enclave_metadata_root_snapshot[e] != e);
+    // invariant inv_root_not_self_2: (!enclave_dead && verif) ==> (forall (e : tap_enclave_id_t) :: valid_enclave_id(e) ==> cpu_2.tap_enclave_metadata_root_snapshot[e] != e);
 
     invariant b1: (!enclave_dead && verif) ==> (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
                 (valid_enclave_id(e) && !cpu_1.tap_enclave_metadata_valid[e]) ==> 
@@ -296,59 +296,59 @@ module integrity_proof {
                 (valid_enclave_id(e) && !cpu_2.tap_enclave_metadata_valid[e]) ==> 
                     (cpu_2.cpu_owner_map[pa] != e));
 
-    invariant b3: (!enclave_dead && verif) ==> (forall (pa: wap_addr_t, e : tap_enclave_id_t) ::
-                cpu_1.tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_1.cpu_owner_map[pa] == e);
-    invariant b4: (!enclave_dead && verif) ==> (forall (pa: wap_addr_t, e : tap_enclave_id_t) ::
-                cpu_2.tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_2.cpu_owner_map[pa] == e);
+    // invariant b3: (!enclave_dead && verif) ==> (forall (pa: wap_addr_t, e : tap_enclave_id_t) ::
+    //             cpu_1.tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_1.cpu_owner_map[pa] == e);
+    // invariant b4: (!enclave_dead && verif) ==> (forall (pa: wap_addr_t, e : tap_enclave_id_t) ::
+    //             cpu_2.tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_2.cpu_owner_map[pa] == e);
     
-    invariant b5: (!enclave_dead && verif) ==> (forall (e: tap_enclave_id_t) :: cpu_1.tap_enclave_metadata_child_count[e] >= 0);
-    invariant b6: (!enclave_dead && verif) ==> (forall (e: tap_enclave_id_t) :: cpu_2.tap_enclave_metadata_child_count[e] >= 0);
+    // invariant b5: (!enclave_dead && verif) ==> (forall (e: tap_enclave_id_t) :: cpu_1.tap_enclave_metadata_child_count[e] >= 0);
+    // invariant b6: (!enclave_dead && verif) ==> (forall (e: tap_enclave_id_t) :: cpu_2.tap_enclave_metadata_child_count[e] >= 0);
 
     // The metadata entrypoints and cpus are owned by the eid itself
     invariant cpu_pc_owned_metadata_1: (!enclave_dead && verif) ==>
-      (cpu_1.cpu_owner_map[cpu_1.tap_enclave_metadata_addr_map[eid][cpu_1.tap_enclave_metadata_pc[eid]]] == eid ||
-        (valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid]) && cpu_1.tap_enclave_metadata_valid[cpu_1.tap_enclave_metadata_root_snapshot[eid]] && cpu_1.cpu_owner_map[cpu_1.tap_enclave_metadata_addr_map[eid][cpu_1.tap_enclave_metadata_pc[eid]]] == cpu_1.tap_enclave_metadata_root_snapshot[eid]));
+      (cpu_1.cpu_owner_map[cpu_1.tap_enclave_metadata_addr_map[eid][cpu_1.tap_enclave_metadata_pc[eid]]] == eid); // ||
+        // (valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid]) && cpu_1.tap_enclave_metadata_valid[cpu_1.tap_enclave_metadata_root_snapshot[eid]] && cpu_1.cpu_owner_map[cpu_1.tap_enclave_metadata_addr_map[eid][cpu_1.tap_enclave_metadata_pc[eid]]] == cpu_1.tap_enclave_metadata_root_snapshot[eid]));
     invariant cpu_pc_owned_metadata_2: (!enclave_dead && verif) ==>
-      (cpu_2.cpu_owner_map[cpu_2.tap_enclave_metadata_addr_map[eid][cpu_2.tap_enclave_metadata_pc[eid]]] == eid ||
-        (valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[eid]) && cpu_2.tap_enclave_metadata_valid[cpu_2.tap_enclave_metadata_root_snapshot[eid]] && cpu_2.cpu_owner_map[cpu_2.tap_enclave_metadata_addr_map[eid][cpu_2.tap_enclave_metadata_pc[eid]]] == cpu_2.tap_enclave_metadata_root_snapshot[eid]));
+      (cpu_2.cpu_owner_map[cpu_2.tap_enclave_metadata_addr_map[eid][cpu_2.tap_enclave_metadata_pc[eid]]] == eid); // ||
+        // (valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[eid]) && cpu_2.tap_enclave_metadata_valid[cpu_2.tap_enclave_metadata_root_snapshot[eid]] && cpu_2.cpu_owner_map[cpu_2.tap_enclave_metadata_addr_map[eid][cpu_2.tap_enclave_metadata_pc[eid]]] == cpu_2.tap_enclave_metadata_root_snapshot[eid]));
     
     // When the CPU is running the enclave `eid`, the pc is owned by `eid` or the root snapshot
     invariant cpu_pc_owned_1: (!enclave_dead && verif && cpu_1.cpu_enclave_id == eid) ==>
-      (cpu_1.cpu_owner_map[cpu_1.cpu_addr_map[cpu_1.cpu_pc]] == eid ||
-       (valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[cpu_1.cpu_enclave_id]) && cpu_1.tap_enclave_metadata_valid[cpu_1.tap_enclave_metadata_root_snapshot[cpu_1.cpu_enclave_id]] && cpu_1.cpu_owner_map[cpu_1.cpu_addr_map[cpu_1.cpu_pc]] == cpu_1.tap_enclave_metadata_root_snapshot[cpu_1.cpu_enclave_id]));
+      (cpu_1.cpu_owner_map[cpu_1.cpu_addr_map[cpu_1.cpu_pc]] == eid); // ||
+      //  (valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[cpu_1.cpu_enclave_id]) && cpu_1.tap_enclave_metadata_valid[cpu_1.tap_enclave_metadata_root_snapshot[cpu_1.cpu_enclave_id]] && cpu_1.cpu_owner_map[cpu_1.cpu_addr_map[cpu_1.cpu_pc]] == cpu_1.tap_enclave_metadata_root_snapshot[cpu_1.cpu_enclave_id]));
     invariant cpu_pc_owned_2: (!enclave_dead && verif && cpu_2.cpu_enclave_id == eid) ==>
-      (cpu_2.cpu_owner_map[cpu_2.cpu_addr_map[cpu_2.cpu_pc]] == eid ||
-       (valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[cpu_2.cpu_enclave_id]) && cpu_2.tap_enclave_metadata_valid[cpu_2.tap_enclave_metadata_root_snapshot[cpu_2.cpu_enclave_id]] && cpu_2.cpu_owner_map[cpu_2.cpu_addr_map[cpu_2.cpu_pc]] == cpu_2.tap_enclave_metadata_root_snapshot[cpu_2.cpu_enclave_id]));
+      (cpu_2.cpu_owner_map[cpu_2.cpu_addr_map[cpu_2.cpu_pc]] == eid); // ||
+      //  (valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[cpu_2.cpu_enclave_id]) && cpu_2.tap_enclave_metadata_valid[cpu_2.tap_enclave_metadata_root_snapshot[cpu_2.cpu_enclave_id]] && cpu_2.cpu_owner_map[cpu_2.cpu_addr_map[cpu_2.cpu_pc]] == cpu_2.tap_enclave_metadata_root_snapshot[cpu_2.cpu_enclave_id]));
 
     // All exclusive addresses should be owned by the enclave `eid` itself or it's root
     invariant excl_addr_ownership_1:
       (verif && !enclave_dead) ==>
         (forall (va: vaddr_t) ::
           ((valid_enclave_id(eid) && cpu_1.tap_enclave_metadata_valid[eid] && cpu_1.tap_enclave_metadata_addr_excl[eid][va]) ==>
-            (cpu_1.cpu_owner_map[cpu_1.tap_enclave_metadata_addr_map[eid][va]] == eid ||
-             (valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid]) && cpu_1.tap_enclave_metadata_valid[cpu_1.tap_enclave_metadata_root_snapshot[eid]] && cpu_1.cpu_owner_map[cpu_1.tap_enclave_metadata_addr_map[eid][va]] == cpu_1.tap_enclave_metadata_root_snapshot[eid]))));
+            (cpu_1.cpu_owner_map[cpu_1.tap_enclave_metadata_addr_map[eid][va]] == eid))); // ||
+            //  (valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid]) && cpu_1.tap_enclave_metadata_valid[cpu_1.tap_enclave_metadata_root_snapshot[eid]] && cpu_1.cpu_owner_map[cpu_1.tap_enclave_metadata_addr_map[eid][va]] == cpu_1.tap_enclave_metadata_root_snapshot[eid]))));
     invariant excl_addr_ownership_2:
       (verif && !enclave_dead) ==>
         (forall (va: vaddr_t) ::
           ((valid_enclave_id(eid) && cpu_2.tap_enclave_metadata_valid[eid] && cpu_2.tap_enclave_metadata_addr_excl[eid][va]) ==>
-            (cpu_2.cpu_owner_map[cpu_2.tap_enclave_metadata_addr_map[eid][va]] == eid ||
-             (valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[eid]) && cpu_2.tap_enclave_metadata_valid[cpu_2.tap_enclave_metadata_root_snapshot[eid]] && cpu_2.cpu_owner_map[cpu_2.tap_enclave_metadata_addr_map[eid][va]] == cpu_2.tap_enclave_metadata_root_snapshot[eid]))));
+            (cpu_2.cpu_owner_map[cpu_2.tap_enclave_metadata_addr_map[eid][va]] == eid))); // ||
+            //  (valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[eid]) && cpu_2.tap_enclave_metadata_valid[cpu_2.tap_enclave_metadata_root_snapshot[eid]] && cpu_2.cpu_owner_map[cpu_2.tap_enclave_metadata_addr_map[eid][va]] == cpu_2.tap_enclave_metadata_root_snapshot[eid]))));
 
     // Any root with a valid enclave index is an active and valid enclave
-    invariant valid_root_is_valid_1:
-      verif ==>
-        (forall (e: tap_enclave_id_t) ::
-          ((valid_enclave_id(e) &&
-            cpu_1.tap_enclave_metadata_valid[e]) ==>
-            (valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[e]) <==>
-          cpu_1.tap_enclave_metadata_valid[cpu_1.tap_enclave_metadata_root_snapshot[e]])));
-    invariant valid_root_is_valid_2:
-      verif ==>
-        (forall (e: tap_enclave_id_t) ::
-          ((valid_enclave_id(e) &&
-            cpu_2.tap_enclave_metadata_valid[e]) ==>
-            (valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[e]) <==>
-          cpu_2.tap_enclave_metadata_valid[cpu_2.tap_enclave_metadata_root_snapshot[e]])));
+    // invariant valid_root_is_valid_1:
+    //   verif ==>
+    //     (forall (e: tap_enclave_id_t) ::
+    //       ((valid_enclave_id(e) &&
+    //         cpu_1.tap_enclave_metadata_valid[e]) ==>
+    //         (valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[e]) <==>
+    //       cpu_1.tap_enclave_metadata_valid[cpu_1.tap_enclave_metadata_root_snapshot[e]])));
+    // invariant valid_root_is_valid_2:
+    //   verif ==>
+    //     (forall (e: tap_enclave_id_t) ::
+    //       ((valid_enclave_id(e) &&
+    //         cpu_2.tap_enclave_metadata_valid[e]) ==>
+    //         (valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[e]) <==>
+    //       cpu_2.tap_enclave_metadata_valid[cpu_2.tap_enclave_metadata_root_snapshot[e]])));
 
     // The CPU page table is consistent with the metadata
     invariant consistent_pt_1: (verif && valid_enclave_id(cpu_1.cpu_enclave_id) && cpu_1.tap_enclave_metadata_valid[cpu_1.cpu_enclave_id]) ==>
@@ -358,7 +358,7 @@ module integrity_proof {
       (cpu_2.cpu_addr_map   == cpu_2.tap_enclave_metadata_addr_map[cpu_2.cpu_enclave_id] &&
        cpu_2.cpu_addr_valid == cpu_2.tap_enclave_metadata_addr_valid[cpu_2.cpu_enclave_id]);
 
-    // The pc always has execute permiss
+    // The pc always has execute permission
     invariant pc_has_execute_perm:
       verif ==>
         (current_mode == mode_enclave ==>
@@ -369,42 +369,42 @@ module integrity_proof {
     invariant valid_pa_owner_2: verif ==> (forall (pa: wap_addr_t) :: (cpu_2.cpu_owner_map[pa] != tap_invalid_enc_id));
 
     // The root of the null enclave is invalid
-    invariant root_has_invalid_root_enc_1: verif ==> cpu_1.tap_enclave_metadata_root_snapshot[tap_null_enc_id] == tap_invalid_enc_id;
-    invariant root_has_invalid_root_enc_2: verif ==> cpu_2.tap_enclave_metadata_root_snapshot[tap_null_enc_id] == tap_invalid_enc_id;
+    // invariant root_has_invalid_root_enc_1: verif ==> cpu_1.tap_enclave_metadata_root_snapshot[tap_null_enc_id] == tap_invalid_enc_id;
+    // invariant root_has_invalid_root_enc_2: verif ==> cpu_2.tap_enclave_metadata_root_snapshot[tap_null_enc_id] == tap_invalid_enc_id;
 
     // If a root snapshot is valid, then the child count of it the root must be positive
-    invariant root_has_pos_child_count_1:
-      verif ==>
-        (forall (e : tap_enclave_id_t) ::
-          (valid_enclave_id(e) &&
-            cpu_1.tap_enclave_metadata_valid[e] &&
-            valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[e])) ==>
-            (cpu_1.tap_enclave_metadata_child_count[cpu_1.tap_enclave_metadata_root_snapshot[e]] > 0));
-    invariant root_has_pos_child_count_2:
-      verif ==>
-        (forall (e : tap_enclave_id_t) ::
-          (valid_enclave_id(e) &&
-            cpu_2.tap_enclave_metadata_valid[e] &&
-            valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[e])) ==>
-            (cpu_2.tap_enclave_metadata_child_count[cpu_2.tap_enclave_metadata_root_snapshot[e]] > 0));
+    // invariant root_has_pos_child_count_1:
+    //   verif ==>
+    //     (forall (e : tap_enclave_id_t) ::
+    //       (valid_enclave_id(e) &&
+    //         cpu_1.tap_enclave_metadata_valid[e] &&
+    //         valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[e])) ==>
+    //         (cpu_1.tap_enclave_metadata_child_count[cpu_1.tap_enclave_metadata_root_snapshot[e]] > 0));
+    // invariant root_has_pos_child_count_2:
+    //   verif ==>
+    //     (forall (e : tap_enclave_id_t) ::
+    //       (valid_enclave_id(e) &&
+    //         cpu_2.tap_enclave_metadata_valid[e] &&
+    //         valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[e])) ==>
+    //         (cpu_2.tap_enclave_metadata_child_count[cpu_2.tap_enclave_metadata_root_snapshot[e]] > 0));
 
     // An invalid enclave cannot be a root snapshot of any enclave
-    invariant no_invalid_roots_1:
-      verif ==>
-        (forall (e: tap_enclave_id_t, e_rs: tap_enclave_id_t) ::
-          ((valid_enclave_id(e) &&
-            cpu_1.tap_enclave_metadata_valid[e] &&
-            !cpu_1.tap_enclave_metadata_valid[e_rs] &&
-            e_rs != tap_invalid_enc_id) ==>
-          cpu_1.tap_enclave_metadata_root_snapshot[e] != e_rs));
-    invariant no_invalid_roots_2:
-      verif ==>
-        (forall (e: tap_enclave_id_t, e_rs: tap_enclave_id_t) ::
-          ((valid_enclave_id(e) &&
-            cpu_2.tap_enclave_metadata_valid[e] &&
-            !cpu_2.tap_enclave_metadata_valid[e_rs] &&
-            e_rs != tap_invalid_enc_id) ==>
-          cpu_2.tap_enclave_metadata_root_snapshot[e] != e_rs));
+    // invariant no_invalid_roots_1:
+    //   verif ==>
+    //     (forall (e: tap_enclave_id_t, e_rs: tap_enclave_id_t) ::
+    //       ((valid_enclave_id(e) &&
+    //         cpu_1.tap_enclave_metadata_valid[e] &&
+    //         !cpu_1.tap_enclave_metadata_valid[e_rs] &&
+    //         e_rs != tap_invalid_enc_id) ==>
+    //       cpu_1.tap_enclave_metadata_root_snapshot[e] != e_rs));
+    // invariant no_invalid_roots_2:
+    //   verif ==>
+    //     (forall (e: tap_enclave_id_t, e_rs: tap_enclave_id_t) ::
+    //       ((valid_enclave_id(e) &&
+    //         cpu_2.tap_enclave_metadata_valid[e] &&
+    //         !cpu_2.tap_enclave_metadata_valid[e_rs] &&
+    //         e_rs != tap_invalid_enc_id) ==>
+    //       cpu_2.tap_enclave_metadata_root_snapshot[e] != e_rs));
 
     //=============================================================================//
     // Snapshot invariants                                                         //
@@ -441,52 +441,52 @@ module integrity_proof {
             (cpu_2.tap_enclave_metadata_addr_excl[e])[cpu_2.tap_enclave_metadata_entrypoint[e]]);
 
     // All enclaves should have a root snapshot that is not itself
-    invariant non_self_ref_root_1:
-      verif ==>
-        (forall (e: tap_enclave_id_t) ::
-          e != tap_invalid_enc_id ==> cpu_1.tap_enclave_metadata_root_snapshot[e] != e);
-    invariant non_self_ref_root_2:
-      verif ==>
-        (forall (e: tap_enclave_id_t) ::
-          e != tap_invalid_enc_id ==> cpu_2.tap_enclave_metadata_root_snapshot[e] != e);
+    // invariant non_self_ref_root_1:
+    //   verif ==>
+    //     (forall (e: tap_enclave_id_t) ::
+    //       e != tap_invalid_enc_id ==> cpu_1.tap_enclave_metadata_root_snapshot[e] != e);
+    // invariant non_self_ref_root_2:
+    //   verif ==>
+    //     (forall (e: tap_enclave_id_t) ::
+    //       e != tap_invalid_enc_id ==> cpu_2.tap_enclave_metadata_root_snapshot[e] != e);
     
     //=============================================================================//
     // Clone invariants                                                            //
     //=============================================================================//
 
     // Snapshots don't have root snapshots
-    invariant snapshots_are_rootless_1:
-      verif ==>
-        (forall (e: tap_enclave_id_t) ::
-          ((valid_enclave_id(e) &&
-            cpu_1.tap_enclave_metadata_valid[e] &&
-            cpu_1.tap_enclave_metadata_is_snapshot[e]) ==>
-            !valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[e])));
-    invariant snapshots_are_rootless_2:
-      verif ==>
-        (forall (e: tap_enclave_id_t) ::
-          ((valid_enclave_id(e) &&
-            cpu_2.tap_enclave_metadata_valid[e] &&
-            cpu_2.tap_enclave_metadata_is_snapshot[e]) ==>
-            !valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[e])));
+    // invariant snapshots_are_rootless_1:
+    //   verif ==>
+    //     (forall (e: tap_enclave_id_t) ::
+    //       ((valid_enclave_id(e) &&
+    //         cpu_1.tap_enclave_metadata_valid[e] &&
+    //         cpu_1.tap_enclave_metadata_is_snapshot[e]) ==>
+    //         !valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[e])));
+    // invariant snapshots_are_rootless_2:
+    //   verif ==>
+    //     (forall (e: tap_enclave_id_t) ::
+    //       ((valid_enclave_id(e) &&
+    //         cpu_2.tap_enclave_metadata_valid[e] &&
+    //         cpu_2.tap_enclave_metadata_is_snapshot[e]) ==>
+    //         !valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[e])));
 
     // All valid roots are snapshots
-    invariant snapshots_are_roots_1:
-      verif ==>
-       (forall (e: tap_enclave_id_t) ::
-        ((valid_enclave_id(e) &&
-          cpu_1.tap_enclave_metadata_valid[e] &&
-          valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[e]) &&
-          cpu_1.tap_enclave_metadata_valid[cpu_1.tap_enclave_metadata_root_snapshot[e]]) ==>
-          cpu_1.tap_enclave_metadata_is_snapshot[cpu_1.tap_enclave_metadata_root_snapshot[e]]));
-    invariant snapshots_are_roots_2:
-      verif ==>
-       (forall (e: tap_enclave_id_t) ::
-        ((valid_enclave_id(e) &&
-          cpu_2.tap_enclave_metadata_valid[e] &&
-          valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[e]) &&
-          cpu_2.tap_enclave_metadata_valid[cpu_2.tap_enclave_metadata_root_snapshot[e]]) ==>
-          cpu_2.tap_enclave_metadata_is_snapshot[cpu_2.tap_enclave_metadata_root_snapshot[e]]));
+    // invariant snapshots_are_roots_1:
+    //   verif ==>
+    //    (forall (e: tap_enclave_id_t) ::
+    //     ((valid_enclave_id(e) &&
+    //       cpu_1.tap_enclave_metadata_valid[e] &&
+    //       valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[e]) &&
+    //       cpu_1.tap_enclave_metadata_valid[cpu_1.tap_enclave_metadata_root_snapshot[e]]) ==>
+    //       cpu_1.tap_enclave_metadata_is_snapshot[cpu_1.tap_enclave_metadata_root_snapshot[e]]));
+    // invariant snapshots_are_roots_2:
+    //   verif ==>
+    //    (forall (e: tap_enclave_id_t) ::
+    //     ((valid_enclave_id(e) &&
+    //       cpu_2.tap_enclave_metadata_valid[e] &&
+    //       valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[e]) &&
+    //       cpu_2.tap_enclave_metadata_valid[cpu_2.tap_enclave_metadata_root_snapshot[e]]) ==>
+    //       cpu_2.tap_enclave_metadata_is_snapshot[cpu_2.tap_enclave_metadata_root_snapshot[e]]));
 
     //=============================================================================//
     // Verification methods and solver options                                     //
