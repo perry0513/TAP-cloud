@@ -63,10 +63,12 @@ def print_progress(statuses, total):
 def summarize_results(results, total_time):
     sat = sum(1 for (_, res, _) in results if res.strip().lower() == "sat")
     unsat = sum(1 for (_, res, _) in results if res.strip().lower() == "unsat")
-    error = sum(1 for (_, res, _) in results if res.strip().lower() not in {"sat", "unsat"})
+    unknown = sum(1 for (_, res, _) in results if res.strip().lower() == "unknown")
+    error = sum(1 for (_, res, _) in results if res.strip().lower() not in {"sat", "unsat", "unknown"})
     print("\n=== Summary ===")
     print(f"  SAT    : {sat}")
     print(f"  UNSAT  : {unsat}")
+    print(f"  UNKNOWN: {unknown}")
     print(f"  Errors : {error}")
     print(f"  Total runtime: {total_time:.2f} seconds")
 
