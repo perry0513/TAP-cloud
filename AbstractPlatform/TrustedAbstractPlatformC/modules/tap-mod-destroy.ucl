@@ -204,8 +204,8 @@ module tap {
   {
     var va : wap_addr_t;
     var pa : wap_addr_t;
-    var eid_wap_addr_free: [wap_addr_t]boolean;
-    var blocked_wap_addr_free: [wap_addr_t]boolean;
+    // var eid_wap_addr_free: [wap_addr_t]boolean;
+    // var blocked_wap_addr_free: [wap_addr_t]boolean;
 
     // Initialize default status
     status = enclave_op_success;
