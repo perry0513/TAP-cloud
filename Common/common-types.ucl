@@ -13,7 +13,8 @@ type voffset_t = bv12;
 
 type wap_addr_t = bv22;
 type word_t  = bv32;
-
+type key_t   = integer;
+type tag_t   = integer;
 
 // -------------------------------------------------------------------- //
 // constants and functions for vaddr_t                                  //
@@ -88,6 +89,12 @@ function paddr2tag(pa : wap_addr_t) : cache_tag_t;
 type measurement_t = integer;
 const k0_measurement_t : measurement_t = 0;
 
+
+// -------------------------------------------------------------------- //
+// Key and Tag Types                                                    //
+// -------------------------------------------------------------------- //
+const null_key_t : key_t = 0;
+define valid_key(k : key_t) : boolean = (k != null_key_t);
 
 //--------------------------------------------------------------------------//
 // utility fns                                                              //
