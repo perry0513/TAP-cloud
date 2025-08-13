@@ -1,0 +1,86 @@
+module tap {
+//
+// Tamper data in persistent storage
+//
+procedure [noinline] rollback_storage (eid : tap_enclave_id_t)
+  returns (status : enclave_op_result_t)
+
+  //----------------------------------------------------------------------//
+  // The status can only be success or invalid arg                        //
+  //----------------------------------------------------------------------//
+  ensures (status == enclave_op_success || status == enclave_op_failed);
+
+  //----------------------------------------------------------------------//
+  // Success/failure conditions                                           //
+  //----------------------------------------------------------------------//
+  ensures(cpu_enclave_id == tap_null_enc_id)
+            <==> (status == enclave_op_success);
+
+  //----------------------------------------------------------------------//
+  // State updates on success                                             //
+  //----------------------------------------------------------------------//
+  // Fresh data is replaced with stale data
+  ensures (status == enclave_op_success) ==>
+            (tap_storage_data[eid][fresh] == tap_storage_data[eid][stale] &&
+              tap_storage_size[eid][fresh] == tap_storage_size[eid][stale] &&
+              tap_storage_key[eid][fresh] == tap_storage_key[eid][stale] &&
+              tap_storage_tag[eid][fresh] == tap_storage_tag[eid][stale]);
+  // All the rest of the data is unchanged
+  ensures (status == enclave_op_success) ==>
+            (tap_storage_data[eid][stale] == old(tap_storage_data)[eid][stale] &&
+              tap_storage_size[eid][stale] == old(tap_storage_size)[eid][stale] &&
+              tap_storage_key[eid][stale] == old(tap_storage_key)[eid][stale] &&
+              tap_storage_tag[eid][stale] == old(tap_storage_tag)[eid][stale]);
+  ensures (status == enclave_op_success) ==>
+            (forall (e : tap_enclave_id_t) ::
+              (e != eid) ==>
+                (tap_storage_data[e] == old(tap_storage_data)[e]  &&
+                  tap_storage_size[e] == old(tap_storage_size)[e] &&
+                  tap_storage_key[e] == old(tap_storage_key)[e]   &&
+                  tap_storage_tag[e] == old(tap_storage_tag)[e]));
+
+  //----------------------------------------------------------------------//
+  // Nothing changes on failure                                           //
+  //----------------------------------------------------------------------//
+  ensures (status != enclave_op_success ==> tap_storage_data == old(tap_storage_data));
+  ensures (status != enclave_op_success ==> tap_storage_size == old(tap_storage_size));
+  ensures (status != enclave_op_success ==> tap_storage_key == old(tap_storage_key));
+  ensures (status != enclave_op_success ==> tap_storage_tag == old(tap_storage_tag));
+
+  //----------------------------------------------------------------------//
+  // Modifies statements                                                  //
+  //----------------------------------------------------------------------//
+  modifies tap_storage_data;
+  modifies tap_storage_size;
+  modifies tap_storage_key;
+  modifies tap_storage_tag;
+{
+  var data : [boolean][vaddr_t]word_t;
+  var size : [boolean]vaddr_t;
+  var key : [boolean]key_t;
+  var tag : [boolean]tag_t;
+
+  status = enclave_op_success;
+
+  if (cpu_enclave_id != tap_null_enc_id) {
+    status = enclave_op_failed;
+  } else {
+    // Rollback the storage to a stale state
+    data = tap_storage_data[eid];
+    data[fresh] = data[stale];
+    tap_storage_data[eid] = data;
+
+    size = tap_storage_size[eid];
+    size[fresh] = size[stale];
+    tap_storage_size[eid] = size;
+
+    key = tap_storage_key[eid];
+    key[fresh] = key[stale];
+    tap_storage_key[eid] = key;
+
+    tag = tap_storage_tag[eid];
+    tag[fresh] = tag[stale];
+    tap_storage_tag[eid] = tag;
+  }
+}
+}

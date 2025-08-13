@@ -23,7 +23,18 @@ module tap {
     block_memory_verif = verify(block_memory_region);                       //passes
     release_memory_verif = verify(release_blocked_memory);                  //passes
     // tap_addr_valid_proofs_verif = verify(tap_addr_valid_proofs);            //passes
-    init_havoc_verif = verify(InitialHavoc);                                //passes                            
+    init_havoc_verif = verify(InitialHavoc);                                //passes
+
+    store_storage_verif = verify(store_storage);
+    load_storage_verif = verify(load_storage);
+
+    create_key_verif = verify(create_key);
+    delete_key_verif = verify(delete_key);
+    transfer_key_verif = verify(transfer_key);
+    get_key_verif = verify(get_key);
+
+    tamper_storage_verif = verify(tamper_storage);
+    rollback_storage_verif = verify(rollback_storage);
 
     check;
     print_results;
