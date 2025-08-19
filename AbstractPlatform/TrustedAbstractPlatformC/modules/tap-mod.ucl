@@ -923,7 +923,7 @@ module tap {
       modifies cache_valid_map;
       modifies cache_tag_map;
       // modifies tap_enclave_metadata_wap_addr_free;
-      modifies tap_enclave_metadata_addr_map;
+      // modifies tap_enclave_metadata_addr_map;
       modifies tap_enclave_metadata_addr_valid;
   {
     var r0, r1  : word_t;
