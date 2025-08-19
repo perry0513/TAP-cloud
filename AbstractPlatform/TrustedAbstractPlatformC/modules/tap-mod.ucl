@@ -962,6 +962,26 @@ module tap {
       untrusted_pc = _untrusted_pc;
   }
 
+  procedure InitStorageData(eid : tap_enclave_id_t, storage_data : storage_data_t, storage_size : vaddr_t)
+      modifies tap_storage_data;
+      modifies tap_storage_size;
+      modifies tap_storage_key;
+      modifies tap_storage_tag;
+  {
+      var d : [boolean]storage_data_t;
+      var s : [boolean]vaddr_t;
+      var k : [boolean]key_t;
+      var t : [boolean]tag_t;
+      d[fresh] = storage_data;
+      s[fresh] = storage_size;
+      k[fresh] = tap_kms_key[eid];
+      t[fresh] = tap_kms_tag[eid];
+      tap_storage_data[eid] = d;
+      tap_storage_size[eid] = s;
+      tap_storage_key[eid] = k;
+      tap_storage_tag[eid] = t;
+  }
+
   //--------------------------------------------------------------------------//
   // Utility functions for measurement theorem.                               //
   //--------------------------------------------------------------------------//
@@ -1066,22 +1086,27 @@ module tap {
     rd = uf_cpu_r2_index(pc_op);
     call update_cpu_regs(rd, uf_cpu_result(cpu_pc, pc_op, l_data, r0, r1));
   }
-                        
+
   define is_measurement_untrusted_op(op : tap_proof_op_t) : boolean
   = op == tap_proof_op_resume || op == tap_proof_op_enter;
 
 
   define is_measurement_enclave_op(op : tap_proof_op_t) : boolean
-  = op == tap_proof_op_compute    ||
-    op == tap_proof_op_pause      ||
-    // op == tap_proof_op_snapshot   ||
-    op == tap_proof_op_exit;
+  = op == tap_proof_op_compute        ||
+    op == tap_proof_op_pause          ||
+    // op == tap_proof_op_snapshot       ||
+    // op == tap_proof_op_exit;
+    op == tap_proof_op_exit           ||
+    op == tap_proof_op_load_storage   ||
+    op == tap_proof_op_store_storage  ||
+    // op == tap_proof_op_transfer_key_and_tag ||
+    op == tap_proof_op_get_key_and_tag;
 
   procedure [inline] MeasurementUntrustedOp(
-      /* operation */ op   : tap_proof_op_t, 
+      /* operation */ op   : tap_proof_op_t,
       /* enclave   */ eid  : tap_enclave_id_t,
       /* args      */ regs : regs_t
-  ) 
+  )
     returns (status : enclave_op_result_t, current_mode : mode_t)
     ensures (current_mode == mode_untrusted ==> cpu_enclave_id == tap_null_enc_id);
     modifies untrusted_addr_valid;
@@ -1129,9 +1154,11 @@ module tap {
 
   procedure [inline] MeasurementEnclaveOp(
       /* operation */ op   : tap_proof_op_t,
-      /* iteration */ iter : integer
-  ) 
-    returns (status : enclave_op_result_t, current_mode : mode_t, vaddr : vaddr_t, word : word_t)
+      /* iteration */ iter : integer,
+      /* location  */ tgt_vaddr : vaddr_t,
+      /* size      */ size : vaddr_t
+  )
+    returns (status : enclave_op_result_t, current_mode : mode_t, vaddr : vaddr_t, word : word_t, abort : boolean)
     modifies untrusted_addr_valid;
     modifies untrusted_addr_map;
     modifies untrusted_regs;
@@ -1154,16 +1181,25 @@ module tap {
     modifies cache_tag_map;
     // modifies tap_enclave_metadata_wap_addr_free;
     // modifies tap_enclave_metadata_is_snapshot;
+    modifies tap_kms_key;
+    modifies tap_kms_tag;
+    modifies tap_storage_data;
+    modifies tap_storage_key;
+    modifies tap_storage_tag;
+    modifies tap_storage_size;
   {
+      var key               : key_t;
+      var tag               : tag_t;
       assert (is_measurement_enclave_op(op));
       vaddr = k0_vaddr_t;
       word  = k0_word_t;
-      case 
+      abort = false;
+      case
         (op == tap_proof_op_compute) : {
           call (vaddr, word) = MeasurementEnclaveComputation(iter);
           status = enclave_op_success;
           current_mode = mode_enclave;
-        } 
+        }
         (op == tap_proof_op_exit) : {
           call (status) = exit();
           current_mode = mode_untrusted;
@@ -1179,6 +1215,18 @@ module tap {
         (op == tap_proof_op_pause) : {
           call (status) = pause();
           current_mode = mode_untrusted;
+        }
+        (op == tap_proof_op_load_storage) : {
+          call (status, abort) = load_storage(tgt_vaddr, size);
+          current_mode = mode_enclave;
+        }
+        (op == tap_proof_op_store_storage) : {
+          call (status, abort) = store_storage(tgt_vaddr, size);
+          current_mode = mode_enclave;
+        }
+        (op == tap_proof_op_get_key_and_tag) : {
+          call (status, key, tag) = get_key_and_tag();
+          current_mode = mode_enclave;
         }
       esac
       // assert status == enclave_op_success;
