@@ -9,25 +9,36 @@ from multiprocessing import Manager
 from threading import Lock
 
 # === CONFIGURATION ===
-COMMAND = "cvc5 -q --lang smt2 --force-logic=ALL"
-# Below are all cvc5 options particularly relevant for quantifiers
-OPTIONS = [
-    "",
-    "--enum-inst",
-    # "--decision internal --enum-inst --enum-inst-sum",
-    # "--simplification none --enum-inst",
-    # "--no-e-matching --enum-inst",
-    # "--no-e-matching --enum-inst --enum-inst-sum",
-    # "--relevant-triggers --enum-inst",
-    # "--trigger-sel max --enum-inst",
-    # "--enum-inst-interleave --enum-inst",
-    # "--finite-model-find --decision internal",
-    # "--finite-model-find --e-matching",
-]
+SOLVER_CONFIG = {
+    "cvc5": {
+        "exe": "cvc5 -q --lang smt2 --force-logic=ALL",
+        # Below are all cvc5 options particularly relevant for quantifiers
+        "options": [
+            "",
+            "--enum-inst",
+            # "--decision internal --enum-inst --enum-inst-sum",
+            # "--simplification none --enum-inst",
+            # "--no-e-matching --enum-inst",
+            # "--no-e-matching --enum-inst --enum-inst-sum",
+            # "--relevant-triggers --enum-inst",
+            # "--trigger-sel max --enum-inst",
+            # "--enum-inst-interleave --enum-inst",
+            # "--finite-model-find --decision internal",
+            # "--finite-model-find --e-matching",
+        ],
+    },
+    "z3": {
+        "exe": "z3",
+        "options": [
+            "",
+        ],
+    }
+}
+
 MAX_WORKERS = 4
 OUTPUT_CSV = "results.csv"
 PROGRESS_UPDATE_INTERVAL = 0.5
-TIMEOUT_PER_SOLVER = 5 # seconds
+TIMEOUT = 10  # seconds
 
 # === Global lock and status tracking ===
 lock = Lock()
@@ -39,28 +50,36 @@ def run_on_file(filepath):
     filepath = Path(filepath)
 
     result = ""
+    command = ""
 
-    solver_option_idx = 0
-    while result not in ["sat", "unsat"] and solver_option_idx < len(OPTIONS):
-        try:
-            option = OPTIONS[solver_option_idx]
-            proc = subprocess.run(
-                f"{COMMAND} {option} {str(filepath)}".split(),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                timeout=TIMEOUT_PER_SOLVER
-            )
-            output = proc.stdout.strip().splitlines()
-            result = output[0] if output else "No output"
-        except Exception as e:
-            result = f"Error: {str(e)}"
-            if "timed out" in result:
-                result = "timeout"
-        solver_option_idx += 1
+    for solver_name, config in SOLVER_CONFIG.items():
+        exe = config["exe"]
+        options = config["options"]
+
+        for opt in options:
+            command = f"{exe} {opt}".strip()
+            try:
+                proc = subprocess.run(
+                    f"{command} {str(filepath)}".split(),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=TIMEOUT,
+                )
+                output = proc.stdout.strip().splitlines()
+                result = output[0] if output else "No output"
+            except Exception as e:
+                result = f"Error: {str(e)}"
+                if "timed out" in result:
+                    result = "timeout"
+
+            if result in ["sat", "unsat"]:
+                break
+        if result in ["sat", "unsat"]:
+            break
 
     duration = time.time() - start_time
-    return str(filepath), result, duration, option
+    return str(filepath), result, duration, command
 
 
 def print_progress(statuses, total):
@@ -100,9 +119,9 @@ def summarize_results(results, total_time):
     if sat > 0 or unknown > 0 or error > 0:
         print()
         print(f"  SAT / UNKNOWN / ERROR instances:")
-        for file, (res, dur, option) in results.items():
+        for file, (res, dur, command) in results.items():
             if res.strip().lower() != "unsat":
-                print(f"    {file} -> {res} ({dur:.2f}s with {option})")
+                print(f"    {file} -> {res} ({dur:.2f}s with {command})")
 
 
 def main(directory):
@@ -128,13 +147,13 @@ def main(directory):
         for future in as_completed(future_to_file):
             file_path = future_to_file[future]
             try:
-                file, result, duration, option = future.result()
+                file, result, duration, command = future.result()
             except Exception as e:
-                file, result, duration, option = file_path, f"Error: {e}", 0.0, ""
+                file, result, duration, command = file_path, f"Error: {e}", 0.0, ""
 
             with lock:
-                results[file] = (result, duration, option)
-                statuses[file] = f"finished in {duration:.2f}s with {result} using `{option}`"
+                results[file] = (result, duration, command)
+                statuses[file] = f"finished in {duration:.2f}s with {result} using `{command}`"
 
             if time.time() - last_update >= PROGRESS_UPDATE_INTERVAL:
                 print_progress(statuses, total)
