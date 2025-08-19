@@ -12,7 +12,7 @@ module tap {
     // get_enclave_addr_map_verif = verify(get_enclave_addr_map);              //no assertions to check
     // set_enclave_addr_map_verif = verify(set_enclave_addr_map);              //no assertions to check
     tap_init_verif = verify(initialize_tap);                                //passes
-    // tap_clone_verif = verify(clone);                                           //passes
+    // tap_clone_verif = verify(clone);                                        //passes
     destroy_verif = verify(destroy);                                        //passes
     enter_verif  = verify(enter);                                           //passes
     exit_verif   = verify(exit);                                            //passes
@@ -30,8 +30,8 @@ module tap {
 
     create_key_verif = verify(create_key);
     delete_key_verif = verify(delete_key);
-    transfer_key_verif = verify(transfer_key);
-    get_key_verif = verify(get_key);
+    transfer_key_and_tag_verif = verify(transfer_key_and_tag);
+    get_key_and_tag_verif = verify(get_key_and_tag);
 
     tamper_storage_verif = verify(tamper_storage);
     rollback_storage_verif = verify(rollback_storage);

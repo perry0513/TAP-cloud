@@ -61,7 +61,7 @@ const kmax_word_t_as_int : integer = 4294967295;
 // -------------------------------------------------------------------- //
 type cache_set_index_t = integer;
 type cache_way_index_t = integer;
-type cache_tag_t       = integer; 
+type cache_tag_t       = integer;
 
 const kmax_cache_set_index_t : cache_set_index_t;
 const kmax_cache_way_index_t : cache_way_index_t;
@@ -95,6 +95,7 @@ const k0_measurement_t : measurement_t = 0;
 // -------------------------------------------------------------------- //
 const null_key_t : key_t = 0;
 define valid_key(k : key_t) : boolean = (k != null_key_t);
+const null_tag_t : tag_t = 0;
 
 //--------------------------------------------------------------------------//
 // utility fns                                                              //

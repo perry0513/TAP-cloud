@@ -5,8 +5,8 @@ const * = common_types.*;
 function * = common_types.*;
 define * = common_types.*;
 
-  
-// 
+
+//
 // registers
 //
 type regindex_t = integer;
@@ -45,7 +45,7 @@ type mode_t = enum {
 //
 type tap_op_t = enum {
     Launch, Destroy, Enter, Exit, Resume, Pause, Snapshot, Clone, HavocMem, HavocPCRegs, HavocPT, Default,
-    StoreStorage, LoadStorage, TamperStorage, RollbackStorage, CreateKey, GetKey, DeleteKey
+    StoreStorage, LoadStorage, TamperStorage, RollbackStorage, CreateKey, GetKeyAndTag, DeleteKey, TransferKeyAndTag
 };
 
 //
@@ -100,6 +100,7 @@ type tap_thread_id_t                       = integer;
 type count_t                               = integer;
 type container_data_t                      = [wap_addr_t]word_t;
 type container_valid_t                     = [wap_addr_t]boolean;
+type storage_data_t                        = [vaddr_t]word_t;
 
 // New state for FAAS enclaves
 // type tap_enclave_metadata_is_snapshot_t    = [tap_enclave_id_t]boolean;
@@ -108,17 +109,14 @@ type container_valid_t                     = [wap_addr_t]boolean;
 // type tap_enclave_metadata_parent_t         = [tap_enclave_id_t]tap_enclave_id_t;
 // type tap_enclave_metadata_wap_addr_free_t  = [tap_enclave_id_t][wap_addr_t]boolean;
 
-// kms key for enclaves
-type tap_enclave_metadata_key_t        = [tap_enclave_id_t]key_t;
-type tap_enclave_metadata_tag_t        = [tap_enclave_id_t]tag_t;
-// FIXME
-define next_tag(t : tag_t) : tag_t = t + 1;
-
 // kms
 type tap_kms_key_t                     = [tap_enclave_id_t]key_t;
+type tap_kms_tag_t                     = [tap_enclave_id_t]tag_t;
+// FIXME: just a counter now
+define next_tag(t : tag_t) : tag_t = t + 1;
 
 // persistent storage for each enclave
-type tap_storage_data_t                    = [tap_enclave_id_t][boolean][vaddr_t]word_t;
+type tap_storage_data_t                    = [tap_enclave_id_t][boolean]storage_data_t;
 type tap_storage_size_t                    = [tap_enclave_id_t][boolean]vaddr_t;
 type tap_storage_key_t                     = [tap_enclave_id_t][boolean]key_t;
 type tap_storage_tag_t                     = [tap_enclave_id_t][boolean]tag_t;
@@ -181,8 +179,9 @@ type tap_proof_op_t = enum {
   tap_proof_op_tamper_storage,
   tap_proof_op_rollback_storage,
   tap_proof_op_create_key,
-  tap_proof_op_get_key,
-  tap_proof_op_delete_key
+  tap_proof_op_get_key_and_tag,
+  tap_proof_op_delete_key,
+  tap_proof_op_transfer_key_and_tag
 };
 
 //
@@ -221,7 +220,7 @@ axiom (forall (w : word_t) :: valid_regindex(uf_cpu_r2_index(w)));
 // @excl_paddr PAs exclusive to the child enclave
 // @owner_map  the owner map
 // @addr_map   the VA exclusive map
-// @p_e        the parent enclave id  
+// @p_e        the parent enclave id
 // function uf_sufficient_mem(excl_paddr: [wap_addr_t]boolean, vaddr_excl: [vaddr_t]boolean, owner_map: [wap_addr_t]tap_enclave_id_t, p_e: tap_enclave_id_t): boolean;
 
 function uf_mem_load_vaddr(pc : vaddr_t, op : word_t, r1 : word_t, r2 : word_t) : vaddr_t;
@@ -235,7 +234,7 @@ function uf_observation_mem(cpu_pc : vaddr_t, l_word : word_t, r_word : word_t) 
 function uf_observation_cache(hit1 : boolean, hit2 : boolean) : word_t;
 function uf_observation_pt(r_valid : addr_perm_t, r_paddr : wap_addr_t) : word_t;
 
-// 
+//
 // Observer types
 //
 type observer_t;

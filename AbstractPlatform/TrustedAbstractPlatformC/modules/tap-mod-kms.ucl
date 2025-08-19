@@ -2,7 +2,7 @@ module tap {
 // Create key
 procedure [noinline] create_key (eid : tap_enclave_id_t)
   returns (status : enclave_op_result_t)
-  
+
   //----------------------------------------------------------------------//
   // The status can only be success or failure                            //
   //----------------------------------------------------------------------//
@@ -11,7 +11,7 @@ procedure [noinline] create_key (eid : tap_enclave_id_t)
   //----------------------------------------------------------------------//
   // Success/failure conditions                                           //
   //----------------------------------------------------------------------//
-  ensures(cpu_enclave_id == tap_null_enc_id &&
+  ensures (cpu_enclave_id == tap_null_enc_id &&
             !valid_key(old(tap_kms_key)[eid]))
             <==> (status == enclave_op_success);
 
@@ -26,10 +26,6 @@ procedure [noinline] create_key (eid : tap_enclave_id_t)
             (forall (e : tap_enclave_id_t) ::
               (e != eid) ==>
                 (tap_kms_key[eid] != tap_kms_key[e]));
-  // New key is different from any keys stored in the enclaves (including itself)
-  ensures (status == enclave_op_success) ==>
-            (forall (e : tap_enclave_id_t) ::
-              (tap_kms_key[eid] != tap_enclave_metadata_key[e]));
   // New key is different from any keys that are used to encrypt data (including itself)
   ensures (status == enclave_op_success) ==>
             (forall (e : tap_enclave_id_t) ::
@@ -40,22 +36,28 @@ procedure [noinline] create_key (eid : tap_enclave_id_t)
             (forall (e : tap_enclave_id_t) ::
               (e != eid) ==>
                 (tap_kms_key[e] == old(tap_kms_key)[e]));
-    
+  ensures (status == enclave_op_success) ==>
+            (forall (e : tap_enclave_id_t) ::
+              tap_kms_tag[e] ==
+                if (e == eid) then null_tag_t
+                else old(tap_kms_tag)[e]);
+
   //----------------------------------------------------------------------//
   // Nothing changes on failure                                           //
   //----------------------------------------------------------------------//
   ensures (status != enclave_op_success ==> tap_kms_key == old(tap_kms_key));
+  ensures (status != enclave_op_success ==> tap_kms_tag == old(tap_kms_tag));
 
   //----------------------------------------------------------------------//
   // KMS invariants                                                       //
   //----------------------------------------------------------------------//
   requires (forall (e1, e2 : tap_enclave_id_t) ::
-              (e1 != e2                       && 
+              (e1 != e2                       &&
                 valid_key(tap_kms_key[e1])    &&
                 valid_key(tap_kms_key[e2]))
                 ==> (tap_kms_key[e1] != tap_kms_key[e2]));
   ensures (forall (e1, e2 : tap_enclave_id_t) ::
-              (e1 != e2                       && 
+              (e1 != e2                       &&
                 valid_key(tap_kms_key[e1])    &&
                 valid_key(tap_kms_key[e2]))
                 ==> (tap_kms_key[e1] != tap_kms_key[e2]));
@@ -64,7 +66,7 @@ procedure [noinline] create_key (eid : tap_enclave_id_t)
   // Modifies statements                                                  //
   //----------------------------------------------------------------------//
   modifies tap_kms_key;
-
+  modifies tap_kms_tag;
 {
   var key : key_t;
 
@@ -80,11 +82,11 @@ procedure [noinline] create_key (eid : tap_enclave_id_t)
     havoc key;
     assume (valid_key(key) &&
             (forall (e : tap_enclave_id_t) ::
-              (key != tap_kms_key[e] &&
-                key != tap_enclave_metadata_key[e] &&
-                (forall (f : boolean) ::
-                  (key != tap_storage_key[e][f])))));
+              (forall (f : boolean) ::
+                (key != tap_kms_key[e] &&
+                (key != tap_storage_key[e][f])))));
     tap_kms_key[eid] = key;
+    tap_kms_tag[eid] = null_tag_t;
   }
 }
 
@@ -93,7 +95,7 @@ procedure [noinline] create_key (eid : tap_enclave_id_t)
 //
 procedure [noinline] delete_key (eid : tap_enclave_id_t)
   returns (status : enclave_op_result_t)
-  
+
   //----------------------------------------------------------------------//
   // The status can only be success or failure                            //
   //----------------------------------------------------------------------//
@@ -102,7 +104,7 @@ procedure [noinline] delete_key (eid : tap_enclave_id_t)
   //----------------------------------------------------------------------//
   // Success/failure conditions                                           //
   //----------------------------------------------------------------------//
-  ensures(cpu_enclave_id == tap_null_enc_id &&
+  ensures (cpu_enclave_id == tap_null_enc_id &&
            valid_key(tap_kms_key[eid]))
             <==> (status == enclave_op_success);
 
@@ -115,22 +117,28 @@ procedure [noinline] delete_key (eid : tap_enclave_id_t)
             (forall (e : tap_enclave_id_t) ::
               (e != eid) ==>
                 (tap_kms_key[e] == old(tap_kms_key)[e]));
-    
+  ensures (status == enclave_op_success) ==>
+            (forall (e : tap_enclave_id_t) ::
+              tap_kms_tag[e] ==
+                if (e == eid) then null_tag_t
+                else old(tap_kms_tag)[e]);
+
   //----------------------------------------------------------------------//
   // Nothing changes on failure                                           //
   //----------------------------------------------------------------------//
   ensures (status != enclave_op_success ==> tap_kms_key == old(tap_kms_key));
+  ensures (status != enclave_op_success ==> tap_kms_tag == old(tap_kms_tag));
 
   //----------------------------------------------------------------------//
   // KMS invariants                                                       //
   //----------------------------------------------------------------------//
   requires (forall (e1, e2 : tap_enclave_id_t) ::
-              (e1 != e2                       && 
+              (e1 != e2                       &&
                 valid_key(tap_kms_key[e1])    &&
                 valid_key(tap_kms_key[e2]))
                 ==> (tap_kms_key[e1] != tap_kms_key[e2]));
   ensures (forall (e1, e2 : tap_enclave_id_t) ::
-              (e1 != e2                       && 
+              (e1 != e2                       &&
                 valid_key(tap_kms_key[e1])    &&
                 valid_key(tap_kms_key[e2]))
                 ==> (tap_kms_key[e1] != tap_kms_key[e2]));
@@ -139,6 +147,7 @@ procedure [noinline] delete_key (eid : tap_enclave_id_t)
   // Modifies statements                                                  //
   //----------------------------------------------------------------------//
   modifies tap_kms_key;
+  modifies tap_kms_tag;
 {
   status = enclave_op_success;
 
@@ -147,13 +156,14 @@ procedure [noinline] delete_key (eid : tap_enclave_id_t)
     status = enclave_op_failed;
   } else {
     assume (!valid_key(tap_kms_key[eid]));
+    tap_kms_tag[eid] = null_tag_t;
   }
 }
 
 //
 // Transfer key ownership
 //
-procedure [noinline] transfer_key (src_eid : tap_enclave_id_t, dst_eid : tap_enclave_id_t)
+procedure [noinline] transfer_key_and_tag (src_eid : tap_enclave_id_t, dst_eid : tap_enclave_id_t)
   returns (status : enclave_op_result_t)
 
   //----------------------------------------------------------------------//
@@ -164,8 +174,9 @@ procedure [noinline] transfer_key (src_eid : tap_enclave_id_t, dst_eid : tap_enc
   //----------------------------------------------------------------------//
   // Success/failure conditions                                           //
   //----------------------------------------------------------------------//
-  ensures(cpu_enclave_id == tap_null_enc_id &&
-           valid_key(old(tap_kms_key)[src_eid])  &&
+  ensures(cpu_enclave_id == tap_null_enc_id     &&
+           src_eid != dst_eid                   &&
+           valid_key(old(tap_kms_key)[src_eid]) &&
            valid_key(old(tap_kms_key)[dst_eid]))
             <==> (status == enclave_op_success);
 
@@ -173,28 +184,37 @@ procedure [noinline] transfer_key (src_eid : tap_enclave_id_t, dst_eid : tap_enc
   // State updates on success                                             //
   //----------------------------------------------------------------------//
   ensures (status == enclave_op_success) ==>
-            (tap_kms_key[dst_eid] == old(tap_kms_key)[src_eid]
-              && !valid_key(tap_kms_key[src_eid]));
+            (tap_kms_key[dst_eid] == old(tap_kms_key)[src_eid] &&
+              // tap_kms_key[src_eid] == null_key_t);
+              !valid_key(tap_kms_key[src_eid]));
   ensures (status == enclave_op_success) ==>
             (forall (e : tap_enclave_id_t) ::
               (e != src_eid && e != dst_eid) ==>
                 (tap_kms_key[e] == old(tap_kms_key)[e]));
-    
+  ensures (status == enclave_op_success) ==>
+            (tap_kms_tag[dst_eid] == old(tap_kms_tag)[src_eid] &&
+              tap_kms_tag[src_eid] == null_tag_t);
+  ensures (status == enclave_op_success) ==>
+            (forall (e : tap_enclave_id_t) ::
+              (e != src_eid && e != dst_eid) ==>
+                (tap_kms_tag[e] == old(tap_kms_tag)[e]));
+
   //----------------------------------------------------------------------//
   // Nothing changes on failure                                           //
   //----------------------------------------------------------------------//
   ensures (status != enclave_op_success ==> tap_kms_key == old(tap_kms_key));
+  ensures (status != enclave_op_success ==> tap_kms_tag == old(tap_kms_tag));
 
   //----------------------------------------------------------------------//
   // KMS invariants                                                       //
   //----------------------------------------------------------------------//
   requires (forall (e1, e2 : tap_enclave_id_t) ::
-              (e1 != e2                       && 
+              (e1 != e2                       &&
                 valid_key(tap_kms_key[e1])    &&
                 valid_key(tap_kms_key[e2]))
                 ==> (tap_kms_key[e1] != tap_kms_key[e2]));
   ensures (forall (e1, e2 : tap_enclave_id_t) ::
-              (e1 != e2                       && 
+              (e1 != e2                       &&
                 valid_key(tap_kms_key[e1])    &&
                 valid_key(tap_kms_key[e2]))
                 ==> (tap_kms_key[e1] != tap_kms_key[e2]));
@@ -203,24 +223,28 @@ procedure [noinline] transfer_key (src_eid : tap_enclave_id_t, dst_eid : tap_enc
   // Modifies statements                                                  //
   //----------------------------------------------------------------------//
   modifies tap_kms_key;
+  modifies tap_kms_tag;
 {
   status = enclave_op_success;
 
-  if (cpu_enclave_id != tap_null_enc_id || 
-      !valid_key(tap_kms_key[src_eid])  || 
+  if (cpu_enclave_id != tap_null_enc_id ||
+      src_eid == dst_eid                ||
+      !valid_key(tap_kms_key[src_eid])  ||
       !valid_key(tap_kms_key[dst_eid])) {
     status = enclave_op_failed;
   } else {
     tap_kms_key[dst_eid] = tap_kms_key[src_eid];
-    assume(!valid_key(tap_kms_key[src_eid]));
+    tap_kms_key[src_eid] = null_key_t;
+    tap_kms_tag[dst_eid] = tap_kms_tag[src_eid];
+    tap_kms_tag[src_eid] = null_tag_t;
   }
 }
 
 //
-// Get key from KMS
+// Get key and tag from KMS
 //
-procedure [noinline] get_key ()
-  returns (status : enclave_op_result_t)
+procedure [noinline] get_key_and_tag ()
+  returns (status : enclave_op_result_t, key : key_t, tag : tag_t)
 
   //----------------------------------------------------------------------//
   // The status can only be success or failure                            //
@@ -236,37 +260,32 @@ procedure [noinline] get_key ()
             <==> (status == enclave_op_success);
 
   //----------------------------------------------------------------------//
-  // State updates on success                                             //
+  // Effects on success                                                   //
   //----------------------------------------------------------------------//
-  ensures (status == enclave_op_success) ==>
-            tap_enclave_metadata_key[cpu_enclave_id] == tap_kms_key[cpu_enclave_id];
-  ensures (status == enclave_op_success) ==>
-            (forall (eid : tap_enclave_id_t) ::
-              (eid != cpu_enclave_id) ==>
-                (tap_enclave_metadata_key[eid] == old(tap_enclave_metadata_key)[eid]));
+  ensures (status == enclave_op_success ==> key == tap_kms_key[cpu_enclave_id]);
+  ensures (status == enclave_op_success ==> tag == tap_kms_tag[cpu_enclave_id]);
 
   //----------------------------------------------------------------------//
-  // Nothing changes on failure                                           //
+  // Effects on failure                                                   //
   //----------------------------------------------------------------------//
-  ensures (status != enclave_op_success 
-            ==> tap_enclave_metadata_key == old(tap_enclave_metadata_key));
-
-  //----------------------------------------------------------------------//
-  // Modifies statements                                                  //
-  //----------------------------------------------------------------------//
-  modifies tap_enclave_metadata_key;
+  ensures (status == enclave_op_failed ==> key == null_key_t);
+  ensures (status == enclave_op_failed ==> tag == null_tag_t);
 {
   var eid : tap_enclave_id_t;
   eid = cpu_enclave_id;
 
+  key = null_key_t;
+  tag = null_tag_t;
+
   status = enclave_op_success;
 
-  if (!valid_enclave_id(eid)           || 
+  if (!valid_enclave_id(eid)           ||
       !tap_enclave_metadata_valid[eid] ||
       !valid_key(tap_kms_key[eid])) {
     status = enclave_op_failed;
   } else {
-    tap_enclave_metadata_key[eid] = tap_kms_key[eid];
+    key = tap_kms_key[eid];
+    tag = tap_kms_tag[eid];
   }
 }
 }

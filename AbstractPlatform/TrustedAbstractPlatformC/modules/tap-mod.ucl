@@ -67,10 +67,6 @@ module tap {
   //
   // KMS metadata
   //
-  var tap_enclave_metadata_key          : tap_enclave_metadata_key_t;
-  var tap_enclave_metadata_tag          : tap_enclave_metadata_tag_t;
-
-  // KMS
   var tap_kms_key                       : tap_kms_key_t;
   axiom (forall (e1, e2 : tap_enclave_id_t) ::
               (e1 != e2                       &&
@@ -80,6 +76,7 @@ module tap {
   // Assume that the OS have all the keys except the keys currently stored in the KMS
   // This is guaranteed by the above axiom
   // axiom valid(tap_kms_key[tap_null_enc_id]);
+  var tap_kms_tag                       : tap_kms_tag_t;
 
   // persistent storage for each enclave
   var tap_storage_data                      : tap_storage_data_t;

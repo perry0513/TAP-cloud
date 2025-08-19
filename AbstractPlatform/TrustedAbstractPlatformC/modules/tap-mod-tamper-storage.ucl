@@ -52,7 +52,7 @@ procedure [noinline] tamper_storage (eid : tap_enclave_id_t)
   modifies tap_storage_key;
   modifies tap_storage_tag;
 {
-  var data : [boolean][vaddr_t]word_t;
+  var data : [boolean]storage_data_t;
   var size : [boolean]vaddr_t;
   var key : [boolean]key_t;
   var tag : [boolean]tag_t;
