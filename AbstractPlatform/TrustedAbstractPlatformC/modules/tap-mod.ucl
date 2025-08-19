@@ -1,4 +1,4 @@
-module tap { 
+module tap {
   //=======================================================//
   // Prelude                                               //
   //=======================================================//
@@ -174,12 +174,14 @@ module tap {
     ensures cpu_cache_enabled ==>
               (forall (i : cache_set_index_t, w : cache_way_index_t) ::
                 (valid_cache_set_index(i) && valid_cache_way_index(w)) ==> !cache_valid_map[i, w]);
-    ensures (forall (pa : wap_addr_t, e : tap_enclave_id_t) :: 
+    ensures (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
               (valid_enclave_id(e) && !tap_enclave_metadata_valid[e]) ==>
                 (cpu_owner_map[pa] != e));
     ensures (forall (e : tap_enclave_id_t) ::
               tap_enclave_metadata_valid[e] ==>
                 tap_addr_perm_x((tap_enclave_metadata_addr_valid[e])[tap_enclave_metadata_entrypoint[e]]));
+    // Cloud TAP specifications
+    ensures (forall (e : tap_enclave_id_t) :: !valid_key(tap_kms_key[e]));
     // FAAS specifications
     // ensures (forall (e: tap_enclave_id_t) :: !tap_enclave_metadata_is_snapshot[e]);
     // ensures (forall (e: tap_enclave_id_t) :: tap_enclave_metadata_child_count[e] == 0);
@@ -206,33 +208,34 @@ module tap {
     modifies cpu_mem;
     modifies cpu_owner_map;
     modifies cache_valid_map;
+    modifies tap_kms_key;
   {
     havoc untrusted_addr_map;
     havoc untrusted_addr_valid;
-    havoc untrusted_addr_map; 
+    havoc untrusted_addr_map;
     havoc untrusted_pc;
     havoc untrusted_regs;
-    
-      
+
+
     call set_cpu_state(tap_null_enc_id,
                        untrusted_addr_map,
                        untrusted_addr_valid,
                        untrusted_pc,
                        untrusted_regs);
-    
+
 
 
     // memory is all zero'd out
     call havoc_cpu_mem();
     assume (forall (p : wap_addr_t) :: cpu_mem[p] == k0_word_t);
-    
+
     // no enclaves exists
     call havoc_cpu_owner_map();
     assume (forall (pa : wap_addr_t) :: cpu_owner_map[pa] == tap_null_enc_id);
     // and that the PC is in the same state
     assume (tap_addr_perm_x(cpu_addr_valid[cpu_pc]));
     assume (cpu_owner_map[cpu_addr_map[cpu_pc]] == cpu_enclave_id);
-    
+
 
     if (cpu_cache_enabled) {
       call initialize_cache();
@@ -241,6 +244,10 @@ module tap {
     // Initialize tap metadata
     havoc tap_enclave_metadata_valid;
     assume (forall (e : tap_enclave_id_t) :: !tap_enclave_metadata_valid[e]);
+
+    // Initialize KMS metadata
+    havoc tap_kms_key;
+    assume (forall (e : tap_enclave_id_t) :: !valid_key(tap_kms_key[e]));
 
     // Initialize faas metadata
     // havoc tap_enclave_metadata_is_snapshot;
@@ -279,7 +286,7 @@ module tap {
         call set_cpu_addr_map(untrusted_addr_map);
       }
     }
-              
+
   }
 
   procedure [inline] get_enclave_addr_map(eid : tap_enclave_id_t, va  : vaddr_t)
@@ -348,12 +355,12 @@ module tap {
 
   //
   // Proof support
-  // 
+  //
 
   //
   // For refinement proof
   //
-  procedure  [inline] cpu_fetch_va(vaddr : vaddr_t, repl_way : cache_way_index_t) 
+  procedure  [inline] cpu_fetch_va(vaddr : vaddr_t, repl_way : cache_way_index_t)
     returns (data : word_t, excp : exception_t, hit : boolean)
     modifies cpu_addr_valid;
     modifies cache_valid_map, cache_tag_map;
@@ -435,7 +442,7 @@ module tap {
     //----------------------------------------------------------------------//
     ensures (cpu_enclave_id == tap_null_enc_id);
     ensures  (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
-                (valid_enclave_id(e) && !tap_enclave_metadata_valid[e]) ==> 
+                (valid_enclave_id(e) && !tap_enclave_metadata_valid[e]) ==>
                     (cpu_owner_map[pa] != e));
 
     // current pc invariants
@@ -445,40 +452,40 @@ module tap {
     // enclave invariants.
     ensures (forall (e : tap_enclave_id_t) :: !valid_enclave_id(e) ==> !tap_enclave_metadata_valid[e]);
     ensures (forall (e : tap_enclave_id_t) ::
-                tap_enclave_metadata_valid[e] ==> 
+                tap_enclave_metadata_valid[e] ==>
                     tap_addr_perm_x((tap_enclave_metadata_addr_valid[e])[tap_enclave_metadata_pc[e]]));
     ensures (forall (e : tap_enclave_id_t) ::
-                tap_enclave_metadata_valid[e] ==> 
+                tap_enclave_metadata_valid[e] ==>
                     tap_addr_perm_x((tap_enclave_metadata_addr_valid[e])[tap_enclave_metadata_entrypoint[e]]));
     ensures (forall (e : tap_enclave_id_t) ::
-                tap_enclave_metadata_valid[e] ==> 
+                tap_enclave_metadata_valid[e] ==>
                     (tap_enclave_metadata_addr_excl[e])[tap_enclave_metadata_pc[e]]);
     ensures (forall (e : tap_enclave_id_t) ::
-                tap_enclave_metadata_valid[e] ==> 
+                tap_enclave_metadata_valid[e] ==>
                     (tap_enclave_metadata_addr_excl[e])[tap_enclave_metadata_entrypoint[e]]);
     ensures (forall (e : tap_enclave_id_t) ::
-                tap_enclave_metadata_valid[e] ==> 
+                tap_enclave_metadata_valid[e] ==>
                     (cpu_owner_map[(tap_enclave_metadata_addr_map[e])[tap_enclave_metadata_pc[e]]] == e)); // ||
                     //  cpu_owner_map[(tap_enclave_metadata_addr_map[e])[tap_enclave_metadata_pc[e]]] == tap_enclave_metadata_root_snapshot[e]));
     ensures (forall (e : tap_enclave_id_t) ::
-                tap_enclave_metadata_valid[e] ==> 
+                tap_enclave_metadata_valid[e] ==>
                     (cpu_owner_map[(tap_enclave_metadata_addr_map[e])[tap_enclave_metadata_entrypoint[e]]] == e)); // ||
                     //  cpu_owner_map[(tap_enclave_metadata_addr_map[e])[tap_enclave_metadata_entrypoint[e]]] == tap_enclave_metadata_root_snapshot[e]));
-    
+
     // CPU/Enclave address map invariants.
-    ensures (forall (va : vaddr_t) :: 
-                (cpu_enclave_id == tap_null_enc_id) ==> 
+    ensures (forall (va : vaddr_t) ::
+                (cpu_enclave_id == tap_null_enc_id) ==>
                     (cpu_addr_map[va] == untrusted_addr_map[va]));
-    ensures (forall (va : vaddr_t) :: 
-                (cpu_enclave_id == tap_null_enc_id) ==> 
+    ensures (forall (va : vaddr_t) ::
+                (cpu_enclave_id == tap_null_enc_id) ==>
                     tap_addr_perm_eq(cpu_addr_valid[va], untrusted_addr_valid[va]));
-    ensures (forall (va : vaddr_t) :: 
-                (cpu_enclave_id != tap_null_enc_id) ==> 
+    ensures (forall (va : vaddr_t) ::
+                (cpu_enclave_id != tap_null_enc_id) ==>
                     (cpu_addr_map[va] == (tap_enclave_metadata_addr_map[cpu_enclave_id])[va]));
-    ensures (forall (va : vaddr_t) :: 
-                (cpu_enclave_id != tap_null_enc_id) ==> 
+    ensures (forall (va : vaddr_t) ::
+                (cpu_enclave_id != tap_null_enc_id) ==>
                     tap_addr_perm_eq(cpu_addr_valid[va], (tap_enclave_metadata_addr_valid[cpu_enclave_id])[va]));
-    
+
     // After havoc, we're in untrusted mode
     ensures (current_mode == mode_untrusted);
     ensures (tap_current_mode == mode_untrusted);
@@ -487,24 +494,24 @@ module tap {
     //----------------------------------------------------------------------//
     // FAAS specifications                                                  //
     //----------------------------------------------------------------------//
-    
+
     // Any PA that is free is owned by that enclave it's free in
     // ensures (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
     //   tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_owner_map[pa] == e);
-    
+
     // Child count is always non-negative
     // ensures (forall (e :tap_enclave_id_t) :: tap_enclave_metadata_child_count[e] >= 0);
-    
+
     // If a root snapshot is valid, then the root has positive child count
     // ensures (forall (e : tap_enclave_id_t) ::
     //           (valid_enclave_id(tap_enclave_metadata_root_snapshot[e])) ==>
     //             (tap_enclave_metadata_child_count[tap_enclave_metadata_root_snapshot[e]] > 0));
-    
+
     // No enclave can have a self referencing root snapshot
     // ensures (forall (e :tap_enclave_id_t) :: valid_enclave_id(e) ==> tap_enclave_metadata_root_snapshot[e] != e);
-    
+
     // If an enclave is not valid, then it cannot be a root snapshot
-    // ensures (forall (root_e : tap_enclave_id_t, e : tap_enclave_id_t) :: 
+    // ensures (forall (root_e : tap_enclave_id_t, e : tap_enclave_id_t) ::
     //           (valid_enclave_id(root_e) && !tap_enclave_metadata_valid[root_e] ==>
     //             tap_enclave_metadata_root_snapshot[e] != root_e));
 
@@ -562,6 +569,20 @@ module tap {
     //         !valid_enclave_id(tap_enclave_metadata_root_snapshot[e])));
 
     //----------------------------------------------------------------------//
+    // KMS invariants                                                       //
+    //----------------------------------------------------------------------//
+    requires (forall (e1, e2 : tap_enclave_id_t) ::
+                (e1 != e2                       &&
+                  valid_key(tap_kms_key[e1])    &&
+                  valid_key(tap_kms_key[e2]))
+                  ==> (tap_kms_key[e1] != tap_kms_key[e2]));
+    ensures (forall (e1, e2 : tap_enclave_id_t) ::
+                (e1 != e2                       &&
+                  valid_key(tap_kms_key[e1])    &&
+                  valid_key(tap_kms_key[e2]))
+                  ==> (tap_kms_key[e1] != tap_kms_key[e2]));
+
+    //----------------------------------------------------------------------//
     // Modifies statements                                                  //
     //----------------------------------------------------------------------//
     modifies untrusted_addr_valid;
@@ -581,6 +602,12 @@ module tap {
     // modifies tap_enclave_metadata_child_count;
     // modifies tap_enclave_metadata_root_snapshot;
     // modifies tap_enclave_metadata_wap_addr_free;
+    modifies tap_kms_key;
+    modifies tap_kms_tag;
+    modifies tap_storage_data;
+    modifies tap_storage_size;
+    modifies tap_storage_key;
+    modifies tap_storage_tag;
     modifies cpu_enclave_id;
     modifies cpu_addr_map;
     modifies cpu_addr_valid;
@@ -602,6 +629,7 @@ module tap {
     var r_container_data  : container_data_t;
     var r_entrypoint      : vaddr_t;
     var r_vaddr           : vaddr_t;
+    var r_size            : vaddr_t;
     var r_paddr           : wap_addr_t;
     var r_word            : word_t;
     var r_valid           : addr_perm_t;
@@ -610,6 +638,9 @@ module tap {
     var done              : boolean;
     var hit               : boolean;
     var op                : tap_op_t;
+    var key               : key_t;
+    var tag               : tag_t;
+    var abort             : boolean;
 
     call initialize_tap();
 
@@ -643,9 +674,9 @@ module tap {
       // enclave invariants
       invariant (forall (e : tap_enclave_id_t) ::
                   !valid_enclave_id(e) ==> !tap_enclave_metadata_valid[e]);
-      invariant (valid_enclave_id(cpu_enclave_id)) ==> 
+      invariant (valid_enclave_id(cpu_enclave_id)) ==>
                   tap_addr_perm_x((tap_enclave_metadata_addr_valid[cpu_enclave_id])[cpu_pc]);
-      invariant (valid_enclave_id(cpu_enclave_id)) ==> 
+      invariant (valid_enclave_id(cpu_enclave_id)) ==>
           (cpu_owner_map[(tap_enclave_metadata_addr_map[cpu_enclave_id])[cpu_pc]] == cpu_enclave_id); // ||
           //  cpu_owner_map[(tap_enclave_metadata_addr_map[cpu_enclave_id])[cpu_pc]] == tap_enclave_metadata_root_snapshot[cpu_enclave_id]);
       invariant (valid_enclave_id(cpu_enclave_id)) ==>
@@ -654,58 +685,58 @@ module tap {
                   (cpu_owner_map[(tap_enclave_metadata_addr_map[cpu_enclave_id])[tap_enclave_metadata_entrypoint[cpu_enclave_id]]] == cpu_enclave_id); // ||
                   //  cpu_owner_map[(tap_enclave_metadata_addr_map[cpu_enclave_id])[tap_enclave_metadata_entrypoint[cpu_enclave_id]]] == tap_enclave_metadata_root_snapshot[cpu_enclave_id]);
       invariant (forall (e : tap_enclave_id_t) ::
-                  (tap_enclave_metadata_valid[e]) ==> 
+                  (tap_enclave_metadata_valid[e]) ==>
                     tap_addr_perm_x((tap_enclave_metadata_addr_valid[e])[tap_enclave_metadata_pc[e]]));
       invariant (forall (e : tap_enclave_id_t) ::
                   tap_enclave_metadata_valid[e] ==>
                     tap_addr_perm_x((tap_enclave_metadata_addr_valid[e])[tap_enclave_metadata_entrypoint[e]]));
-      
+
       // If a PA is exclusive to an enclave, it has some permission
       // NOTE: This should not verify with the old version of snapshot (counter example when there's write-only memory)
       invariant (forall (e : tap_enclave_id_t, v : vaddr_t) ::
-                  (tap_enclave_metadata_valid[e] && (tap_enclave_metadata_addr_excl[e])[v]) ==> 
+                  (tap_enclave_metadata_valid[e] && (tap_enclave_metadata_addr_excl[e])[v]) ==>
                     tap_addr_perm_v((tap_enclave_metadata_addr_valid[e])[v]));
 
       invariant (forall (e : tap_enclave_id_t, v : vaddr_t) ::
-                  (tap_enclave_metadata_valid[e] && (tap_enclave_metadata_addr_excl[e])[v]) ==> 
+                  (tap_enclave_metadata_valid[e] && (tap_enclave_metadata_addr_excl[e])[v]) ==>
                     (cpu_owner_map[(tap_enclave_metadata_addr_map[e])[v]] == e)); // ||
                     //  (valid_enclave_id(tap_enclave_metadata_root_snapshot[e]) && tap_enclave_metadata_valid[tap_enclave_metadata_root_snapshot[e]] && cpu_owner_map[(tap_enclave_metadata_addr_map[e])[v]] == tap_enclave_metadata_root_snapshot[e])));
 
       // The current PC should be exclusive to the enclave
       invariant (forall (e : tap_enclave_id_t) ::
-                  tap_enclave_metadata_valid[e] ==> 
+                  tap_enclave_metadata_valid[e] ==>
                     (tap_enclave_metadata_addr_excl[e])[tap_enclave_metadata_pc[e]]);
 
       invariant (forall (e : tap_enclave_id_t) ::
-                  tap_enclave_metadata_valid[e] ==> 
+                  tap_enclave_metadata_valid[e] ==>
                     (tap_enclave_metadata_addr_excl[e])[tap_enclave_metadata_entrypoint[e]]);
 
       // The PA corresponding to the PC VA is owned by the enclave
       invariant (forall (e : tap_enclave_id_t) ::
-                  (tap_enclave_metadata_valid[e]) ==> 
+                  (tap_enclave_metadata_valid[e]) ==>
                     (cpu_owner_map[(tap_enclave_metadata_addr_map[e])[tap_enclave_metadata_pc[e]]] == e)); // ||
                     //  cpu_owner_map[(tap_enclave_metadata_addr_map[e])[tap_enclave_metadata_pc[e]]] == tap_enclave_metadata_root_snapshot[e]));
-      
+
       invariant (forall (e : tap_enclave_id_t) ::
-                  tap_enclave_metadata_valid[e] ==> 
+                  tap_enclave_metadata_valid[e] ==>
                     (cpu_owner_map[(tap_enclave_metadata_addr_map[e])[tap_enclave_metadata_entrypoint[e]]] == e)); // ||
                     //  cpu_owner_map[(tap_enclave_metadata_addr_map[e])[tap_enclave_metadata_entrypoint[e]]] == tap_enclave_metadata_root_snapshot[e]));
       // CPU/Enclave address map invariants.
-      invariant (forall (va : vaddr_t) :: 
-                  (cpu_enclave_id == tap_null_enc_id) ==> 
+      invariant (forall (va : vaddr_t) ::
+                  (cpu_enclave_id == tap_null_enc_id) ==>
                     (cpu_addr_map[va] == untrusted_addr_map[va]));
-      invariant (forall (va : vaddr_t) :: 
-                  (cpu_enclave_id == tap_null_enc_id) ==> 
+      invariant (forall (va : vaddr_t) ::
+                  (cpu_enclave_id == tap_null_enc_id) ==>
                     tap_addr_perm_eq(cpu_addr_valid[va], untrusted_addr_valid[va]));
-      invariant (cpu_enclave_id != tap_null_enc_id) ==> 
+      invariant (cpu_enclave_id != tap_null_enc_id) ==>
                   (cpu_addr_map == (tap_enclave_metadata_addr_map[cpu_enclave_id]));
-      invariant (forall (va : vaddr_t) :: 
-                  (cpu_enclave_id != tap_null_enc_id) ==> 
+      invariant (forall (va : vaddr_t) ::
+                  (cpu_enclave_id != tap_null_enc_id) ==>
                     tap_addr_perm_eq(cpu_addr_valid[va], (tap_enclave_metadata_addr_valid[cpu_enclave_id])[va]));
       invariant  (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
-                  (valid_enclave_id(e) && !tap_enclave_metadata_valid[e]) ==> 
+                  (valid_enclave_id(e) && !tap_enclave_metadata_valid[e]) ==>
                     (cpu_owner_map[pa] != e));
-      
+
       // Enclaves should own their own exclusive mapped memory
       invariant (forall (e: tap_enclave_id_t, va: vaddr_t) ::
                   ((valid_enclave_id(e) && tap_enclave_metadata_valid[e] && tap_enclave_metadata_addr_excl[e][va]) ==>
@@ -744,7 +775,7 @@ module tap {
       // All PAs are owned by null enclave or some valid enclave
       invariant (forall (p : wap_addr_t) :: cpu_owner_map[p] != tap_invalid_enc_id);
       // invariant tap_enclave_metadata_root_snapshot[tap_null_enc_id] == tap_invalid_enc_id;
-      
+
       // Invalid indexed enclaves are never marked valid
       invariant (forall (e: tap_enclave_id_t) :: !valid_enclave_id(e) ==> !tap_enclave_metadata_valid[e]);
 
@@ -769,10 +800,10 @@ module tap {
       // invariant (forall (e : tap_enclave_id_t) ::
       //             (valid_enclave_id(tap_enclave_metadata_root_snapshot[e])) ==>
       //             (tap_enclave_metadata_child_count[tap_enclave_metadata_root_snapshot[e]] > 0));
-      // Enclaves cannot have itself as the root 
+      // Enclaves cannot have itself as the root
       // invariant (forall (e :tap_enclave_id_t) :: e != tap_invalid_enc_id ==> tap_enclave_metadata_root_snapshot[e] != e);
       // If an enclave has a root, it's either invalid or the enclave is valid
-      // invariant (forall (p_e : tap_enclave_id_t, e : tap_enclave_id_t) :: 
+      // invariant (forall (p_e : tap_enclave_id_t, e : tap_enclave_id_t) ::
       //           ((p_e != tap_invalid_enc_id && !tap_enclave_metadata_valid[p_e]) ==>
       //             tap_enclave_metadata_root_snapshot[e] != p_e));
 
@@ -800,6 +831,13 @@ module tap {
 
       // Current mode ends as untrusted
       invariant tap_current_mode == mode_untrusted;
+
+      // KMS invariant: all keys in kms are unique
+      invariant (forall (e1, e2 : tap_enclave_id_t) ::
+                  (e1 != e2                       &&
+                    valid_key(tap_kms_key[e1])    &&
+                    valid_key(tap_kms_key[e2]))
+                    ==> (tap_kms_key[e1] != tap_kms_key[e2]));
     {
       havoc r_eid;
       havoc op;
@@ -840,6 +878,31 @@ module tap {
           //     havoc parent_eid;
           //     call (status) = clone(r_eid, parent_eid, r_excl_map);
           // }
+          (op == StoreStorage) : {
+            havoc r_vaddr;
+            havoc r_size;
+            call (status, abort) = store_storage(r_vaddr, r_size);
+          }
+          (op == LoadStorage) : {
+            havoc r_vaddr;
+            havoc r_size;
+            call (status, abort) = load_storage(r_vaddr, r_size);
+          }
+          (op == TamperStorage) : {
+            call (status) = tamper_storage(r_eid);
+          }
+          (op == RollbackStorage) : {
+            call (status) = rollback_storage(r_eid);
+          }
+          (op == CreateKey) : {
+            call (status) = create_key(r_eid);
+          }
+          (op == GetKeyAndTag) : {
+            call (status, key, tag) = get_key_and_tag();
+          }
+          (op == DeleteKey) : {
+            call (status) = delete_key(r_eid);
+          }
           (op == HavocMem) : {
             havoc r_vaddr;
             havoc r_word;
@@ -851,14 +914,14 @@ module tap {
             call havoc_cpu_pc();
             call havoc_cpu_regs();
             assume (tap_addr_perm_x(cpu_addr_valid[cpu_pc]));
-            assume (cpu_enclave_id != tap_null_enc_id) ==> 
+            assume (cpu_enclave_id != tap_null_enc_id) ==>
                       ((tap_enclave_metadata_addr_excl[cpu_enclave_id])[cpu_pc]);
             assume (cpu_owner_map[cpu_addr_map[cpu_pc]] == cpu_enclave_id); //  ||
                     // (valid_enclave_id(tap_enclave_metadata_root_snapshot[cpu_enclave_id]) &&
                     //   tap_enclave_metadata_valid[tap_enclave_metadata_root_snapshot[cpu_enclave_id]] &&
                     //   cpu_owner_map[cpu_addr_map[cpu_pc]] == tap_enclave_metadata_root_snapshot[cpu_enclave_id]));
           }
-          (op == HavocPT) : {                            
+          (op == HavocPT) : {
             if (cpu_enclave_id == tap_null_enc_id) {
               havoc r_valid;
               havoc r_vaddr;
@@ -943,7 +1006,7 @@ module tap {
             (valid_enclave_id(eid) &&
              tap_enclave_metadata_valid[eid]) ; // &&
             //  cpu_owner_map[pc_pa] == tap_enclave_metadata_root_snapshot[eid]);
-    havoc way; 
+    havoc way;
     assume valid_cache_way_index(way);
     call (pc_op, excp, hit) = fetch_va(cpu_pc, way);
     assert excp == excp_none;
@@ -960,7 +1023,7 @@ module tap {
               // (valid_enclave_id(tap_enclave_metadata_root_snapshot[eid]) &&
               //  tap_enclave_metadata_valid[tap_enclave_metadata_root_snapshot[eid]] &&
               //  cpu_owner_map[cpu_addr_map[l_vaddr]] == tap_enclave_metadata_root_snapshot[eid]);
-      havoc way; 
+      havoc way;
       assume valid_cache_way_index(way);
       call (l_data, excp, hit) = load_va(l_vaddr, way);
     } else {
@@ -979,14 +1042,14 @@ module tap {
               // (valid_enclave_id(tap_enclave_metadata_root_snapshot[eid]) &&
               //  tap_enclave_metadata_valid[tap_enclave_metadata_root_snapshot[eid]] &&
               //  cpu_owner_map[cpu_addr_map[s_vaddr]] == tap_enclave_metadata_root_snapshot[eid]);
-      havoc way; 
+      havoc way;
       assume valid_cache_way_index(way);
       call (excp, hit) = store_va(s_vaddr, s_data, way);
       // assert excp == excp_none;
     }
     // if we're writing to shared memory, there's no point because
     // we can't expect the OS to "remember" what we wrote anyway.
-    // but we do check that both enclaves write the same data to 
+    // but we do check that both enclaves write the same data to
     // the same vaddr.
     vaddr = s_vaddr;
     data = s_data;
@@ -1142,7 +1205,7 @@ module tap {
       modifies cache_valid_map;
       modifies cache_tag_map;
       // modifies tap_enclave_metadata_wap_addr_free;
-      modifies tap_enclave_metadata_addr_map;      
+      modifies tap_enclave_metadata_addr_map;
       modifies tap_enclave_metadata_addr_valid;
   {
       var r0, r1  : word_t;
@@ -1185,7 +1248,7 @@ module tap {
 
       // Load address and value based on the PC operation
       l_vaddr = uf_mem_load_vaddr(cpu_pc, pc_op, r0, r1);
-      
+
       // Assume that we can read from the VA
       assume tap_addr_perm_r(cpu_addr_valid[l_vaddr]);
 
@@ -1265,7 +1328,7 @@ module tap {
       /* registers to read/write. */  r_read : regindex_t, r_write : regindex_t, r_data: word_t,
       /* mem. to read/write.      */  l_vaddr: vaddr_t, s_vaddr: vaddr_t, s_data : word_t,
       /* "pt" entry to read       */  r_pt_eid : tap_enclave_id_t, r_pt_va : vaddr_t,
-      /* "pt" entry to change.    */  pt_eid : tap_enclave_id_t, pt_vaddr: vaddr_t, 
+      /* "pt" entry to change.    */  pt_eid : tap_enclave_id_t, pt_vaddr: vaddr_t,
       /* "pt" entry to change.    */  pt_valid: addr_perm_t, pt_paddr: wap_addr_t)
       returns (observation : word_t)
       requires valid_regindex(r_read);
@@ -1301,10 +1364,10 @@ module tap {
 
       // Store to memory
       call (excp, hit_1) = store_va(s_vaddr, s_data, s_way);
-      
+
       // Load from memory
       call (l_word, excp, hit_2) = load_va(l_vaddr, l_way);
-      
+
       // Read from register
       r_word = cpu_regs[r_read];
       observation = uf_observation_mem(cpu_pc, l_word, r_word);
@@ -1321,7 +1384,7 @@ module tap {
       /* registers to read/write. */  r_read : regindex_t, r_write : regindex_t, r_data: word_t,
       /* mem. to read/write.      */  l_vaddr: vaddr_t, s_vaddr: vaddr_t, s_data : word_t,
       /* "pt" entry to read       */  r_pt_eid : tap_enclave_id_t, r_pt_va : vaddr_t,
-      /* "pt" entry to change.    */  pt_eid : tap_enclave_id_t, pt_vaddr: vaddr_t, 
+      /* "pt" entry to change.    */  pt_eid : tap_enclave_id_t, pt_vaddr: vaddr_t,
       /* "pt" entry to change.    */  pt_valid: addr_perm_t, pt_paddr: wap_addr_t,
       /* ways to change.          */  l_way, s_way : cache_way_index_t)
       returns (observation : word_t, hit_1 : boolean, hit_2 : boolean,
@@ -1337,7 +1400,7 @@ module tap {
                 (cpu_owner_map[old(cpu_addr_map)[l_vaddr]] != tap_null_enc_id && cpu_owner_map[old(cpu_addr_map)[l_vaddr]] != cpu_enclave_id)))
                ==> (observation == uf_observation_cache(false, false));
       ensures (forall (p : wap_addr_t, w : cache_way_index_t) ::
-                 ((paddr2set(p) != paddr2set(old(cpu_addr_map)[s_vaddr]) || w != s_way) && 
+                 ((paddr2set(p) != paddr2set(old(cpu_addr_map)[s_vaddr]) || w != s_way) &&
                   (paddr2set(p) != paddr2set(old(cpu_addr_map)[l_vaddr]) || w != l_way))
                     ==> ((cache_valid_map[paddr2set(p), w] == old(cache_valid_map)[paddr2set(p), w]) &&
                          (cache_tag_map[paddr2set(p), w] == old(cache_tag_map)[paddr2set(p), w])));
@@ -1346,7 +1409,7 @@ module tap {
                       ((paddr2set(p) == paddr2set(old(cpu_addr_map)[s_vaddr]) && w == s_way) &&
                       (paddr2set(old(cpu_addr_map)[s_vaddr]) != paddr2set(old(cpu_addr_map)[l_vaddr]) || s_way != l_way) &&
                       (excp_1 != excp_none || hit_1))
-                      ==> 
+                      ==>
                           (cache_valid_map[paddr2set(p), w] == old(cache_valid_map)[paddr2set(p), w] &&
                            cache_tag_map[paddr2set(p), w] == old(cache_tag_map)[paddr2set(p), w]));
       ensures (cpu_cache_enabled) ==>
@@ -1354,7 +1417,7 @@ module tap {
                       ((paddr2set(p) == paddr2set(old(cpu_addr_map)[s_vaddr]) && w == s_way) &&
                       (paddr2set(old(cpu_addr_map)[s_vaddr]) != paddr2set(old(cpu_addr_map)[l_vaddr]) || s_way != l_way) &&
                       (excp_1 == excp_none && !hit_1))
-                      ==> 
+                      ==>
                           (cache_valid_map[paddr2set(p), w] == true &&
                            cache_tag_map[paddr2set(p), w] == paddr2tag(old(cpu_addr_map)[s_vaddr])));
       ensures (cpu_cache_enabled) ==>
@@ -1362,7 +1425,7 @@ module tap {
                       ((paddr2set(p) == paddr2set(old(cpu_addr_map)[l_vaddr]) && w == l_way) &&
                       (paddr2set(old(cpu_addr_map)[s_vaddr]) != paddr2set(old(cpu_addr_map)[l_vaddr]) || s_way != l_way) &&
                       (excp_2 != excp_none || hit_2))
-                      ==> 
+                      ==>
                           (cache_valid_map[paddr2set(p), w] == old(cache_valid_map)[paddr2set(p), w] &&
                            cache_tag_map[paddr2set(p), w] == old(cache_tag_map)[paddr2set(p), w]));
       ensures (cpu_cache_enabled) ==>
@@ -1370,7 +1433,7 @@ module tap {
                       ((paddr2set(p) == paddr2set(old(cpu_addr_map)[l_vaddr]) && w == l_way) &&
                       (paddr2set(old(cpu_addr_map)[s_vaddr]) != paddr2set(old(cpu_addr_map)[l_vaddr]) || s_way != l_way) &&
                       (excp_2 == excp_none && !hit_2))
-                      ==> 
+                      ==>
                           (cache_valid_map[paddr2set(p), w] == true &&
                            cache_tag_map[paddr2set(p), w] == paddr2tag(old(cpu_addr_map)[l_vaddr])));
 
@@ -1379,13 +1442,13 @@ module tap {
                 (forall (p : wap_addr_t, w : cache_way_index_t) ::
                   ((paddr2set(p) == paddr2set(old(cpu_addr_map)[s_vaddr]) && w == s_way) &&
                    (paddr2set(old(cpu_addr_map)[s_vaddr]) == paddr2set(old(cpu_addr_map)[l_vaddr]) && s_way == l_way) &&
-                    ((hit_1 && hit_2) || 
+                    ((hit_1 && hit_2) ||
                      (excp_2 != excp_none && hit_1 && !hit_2) ||
                      (excp_1 != excp_none && !hit_1 && hit_2) ||
                      (excp_1 != excp_none && excp_2 != excp_none)))
-                  ==> (cache_valid_map[paddr2set(p), w] == old(cache_valid_map)[paddr2set(p), w] && 
+                  ==> (cache_valid_map[paddr2set(p), w] == old(cache_valid_map)[paddr2set(p), w] &&
                        cache_tag_map[paddr2set(p), w] == old(cache_tag_map)[paddr2set(p), w]));
-      ensures (cpu_cache_enabled) ==> 
+      ensures (cpu_cache_enabled) ==>
                 (forall (p : wap_addr_t, w : cache_way_index_t) ::
                   ((paddr2set(p) == paddr2set(old(cpu_addr_map)[s_vaddr]) && w == s_way) &&
                    (paddr2set(old(cpu_addr_map)[s_vaddr]) == paddr2set(old(cpu_addr_map)[l_vaddr]) && s_way == l_way) &&
@@ -1394,7 +1457,7 @@ module tap {
                      (excp_1 == excp_none && excp_2 == excp_none && !hit_1 && !hit_2)))
                   ==> (cache_valid_map[paddr2set(p), w] == true &&
                        cache_tag_map[paddr2set(p), w] == paddr2tag(old(cpu_addr_map)[l_vaddr])));
-      ensures (cpu_cache_enabled) ==> 
+      ensures (cpu_cache_enabled) ==>
                 (forall (p : wap_addr_t, w : cache_way_index_t) ::
                   ((paddr2set(p) == paddr2set(old(cpu_addr_map)[s_vaddr]) && w == s_way) &&
                    (paddr2set(old(cpu_addr_map)[s_vaddr]) == paddr2set(old(cpu_addr_map)[l_vaddr]) && s_way == l_way) &&
@@ -1407,10 +1470,10 @@ module tap {
                      (cache_valid_map[paddr2set(old(cpu_addr_map)[s_vaddr]), s_way] == true));
       ensures ((cache_valid_map[paddr2set(old(cpu_addr_map)[l_vaddr]), l_way] == old(cache_valid_map)[paddr2set(old(cpu_addr_map)[l_vaddr]), l_way]) ||
                      (cache_valid_map[paddr2set(old(cpu_addr_map)[l_vaddr]), l_way] == true));
-      ensures (!cpu_cache_enabled) ==> 
+      ensures (!cpu_cache_enabled) ==>
                 (cache_valid_map == old(cache_valid_map) && cache_tag_map == old(cache_tag_map));
       ensures (excp_1 == excp_none && cpu_cache_enabled && !hit_1 &&
-               (paddr2set(old(cpu_addr_map)[s_vaddr]) != paddr2set(old(cpu_addr_map)[l_vaddr]) || s_way != l_way)) 
+               (paddr2set(old(cpu_addr_map)[s_vaddr]) != paddr2set(old(cpu_addr_map)[l_vaddr]) || s_way != l_way))
                 ==> ((cache_valid_map[paddr2set(old(cpu_addr_map)[s_vaddr]), s_way] == true) &&
                       (cache_tag_map[paddr2set(old(cpu_addr_map)[s_vaddr]), s_way] == paddr2tag(old(cpu_addr_map)[s_vaddr])));
       ensures (excp_2 == excp_none && cpu_cache_enabled && !hit_2)
@@ -1462,7 +1525,7 @@ module tap {
       /* registers to read/write. */  r_read : regindex_t, r_write : regindex_t, r_data: word_t,
       /* mem. to read/write.      */  l_vaddr: vaddr_t, s_vaddr: vaddr_t, s_data : word_t,
       /* "pt" entry to read       */  r_pt_eid : tap_enclave_id_t, r_pt_va : vaddr_t,
-      /* "pt" entry to change.    */  pt_eid : tap_enclave_id_t, pt_vaddr: vaddr_t, 
+      /* "pt" entry to change.    */  pt_eid : tap_enclave_id_t, pt_vaddr: vaddr_t,
       /* "pt" entry to change.    */  pt_valid: addr_perm_t, pt_paddr: wap_addr_t)
       returns (observation : word_t, excp : exception_t)
       requires valid_regindex(r_read);
@@ -1515,7 +1578,7 @@ module tap {
       var paddr        : wap_addr_t;
       var status       : enclave_op_result_t;
       var l_way, s_way : cache_way_index_t;
-      
+
       havoc excp;
 
       assume (excp != excp_none);
