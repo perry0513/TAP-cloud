@@ -9,18 +9,17 @@ module tap {
     // Global TAP invariants                                                //
     //----------------------------------------------------------------------//
     // requires (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
-    //             (valid_enclave_id(e) && !tap_enclave_metadata_valid[e]) ==> 
+    //             (valid_enclave_id(e) && !tap_enclave_metadata_valid[e]) ==>
     //                 (cpu_owner_map[pa] != e));
     // ensures  (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
-    //             (valid_enclave_id(e) && !tap_enclave_metadata_valid[e]) ==> 
+    //             (valid_enclave_id(e) && !tap_enclave_metadata_valid[e]) ==>
     //                 (cpu_owner_map[pa] != e));
     //----------------------------------------------------------------------//
     // Success/failure conditions                                           //
     //----------------------------------------------------------------------//
-    ensures (old(cpu_enclave_id) == tap_null_enc_id) ==> (status == enclave_op_failed);
-    ensures (old(cpu_enclave_id) != tap_null_enc_id) ==> (status == enclave_op_success);
+    ensures (old(cpu_enclave_id) != tap_null_enc_id) <==> (status == enclave_op_success);
     ensures (status == enclave_op_success || status == enclave_op_failed);
-               
+
     //----------------------------------------------------------------------//
     // Nothing changes on failure                                           //
     //----------------------------------------------------------------------//
@@ -35,11 +34,11 @@ module tap {
     ensures (status != enclave_op_success ==> tap_enclave_metadata_pc == old(tap_enclave_metadata_pc));
     ensures (status != enclave_op_success ==> tap_enclave_metadata_paused == old(tap_enclave_metadata_paused));
     // No enclave except `eid` changes for paused, pc, regs, addr_valid and addr_map metadata
-    ensures (forall (e : tap_enclave_id_t) :: 
-        e != old(cpu_enclave_id) ==> 
+    ensures (forall (e : tap_enclave_id_t) ::
+        e != old(cpu_enclave_id) ==>
             (tap_enclave_metadata_paused[e] == old(tap_enclave_metadata_paused)[e]));
-    ensures (forall (e : tap_enclave_id_t) :: 
-        e != old(cpu_enclave_id) ==> 
+    ensures (forall (e : tap_enclave_id_t) ::
+        e != old(cpu_enclave_id) ==>
             (tap_enclave_metadata_pc[e] == old(tap_enclave_metadata_pc)[e]));
     ensures (forall (e : tap_enclave_id_t) ::
         e != old(cpu_enclave_id) ==>
@@ -57,7 +56,7 @@ module tap {
     ensures (status == enclave_op_success) ==> (cpu_pc == untrusted_pc);
     ensures (status == enclave_op_success) ==> (cpu_enclave_id == tap_null_enc_id);
     ensures (status == enclave_op_success) ==> (tap_enclave_metadata_paused[old(cpu_enclave_id)]);
-    ensures (status == enclave_op_success) ==> 
+    ensures (status == enclave_op_success) ==>
             (tap_enclave_metadata_pc[old(cpu_enclave_id)] == old(cpu_pc));
     ensures (status == enclave_op_success) ==>
             (tap_enclave_metadata_regs[old(cpu_enclave_id)] == old(cpu_regs));
@@ -72,7 +71,7 @@ module tap {
     ensures (status == enclave_op_success) ==>
             (cpu_addr_map == untrusted_addr_map);
     ensures (tap_addr_perm_x(untrusted_addr_valid[untrusted_pc])
-              ==> (status == enclave_op_success 
+              ==> (status == enclave_op_success
                     ==> tap_addr_perm_x(cpu_addr_valid[cpu_pc])));
     ensures (status == enclave_op_success
               ==> (cpu_owner_map[untrusted_addr_map[untrusted_pc]]

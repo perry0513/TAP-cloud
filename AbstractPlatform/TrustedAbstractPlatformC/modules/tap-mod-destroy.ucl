@@ -8,30 +8,30 @@ module tap {
     // Global TAP invariants                                                //
     //----------------------------------------------------------------------//
     requires (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
-                (valid_enclave_id(e) && !tap_enclave_metadata_valid[e]) ==> 
+                (valid_enclave_id(e) && !tap_enclave_metadata_valid[e]) ==>
                     (cpu_owner_map[pa] != e));
     ensures  (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
-                (valid_enclave_id(e) && !tap_enclave_metadata_valid[e]) ==> 
+                (valid_enclave_id(e) && !tap_enclave_metadata_valid[e]) ==>
                     (cpu_owner_map[pa] != e));
 
     //----------------------------------------------------------------------//
     // Success/failure conditions                                           //
     //----------------------------------------------------------------------//
     // FIXME: One of these is redundant; remove
-    // ensures (!valid_enclave_id(eid)                 || 
-    //          !old(tap_enclave_metadata_valid)[eid]  || 
+    // ensures (!valid_enclave_id(eid)                 ||
+    //          !old(tap_enclave_metadata_valid)[eid]  ||
     //          cpu_enclave_id != tap_null_enc_id      ||
     //          old(tap_enclave_metadata_child_count)[eid] != 0) ==> (status == enclave_op_invalid_arg);
-    // ensures (valid_enclave_id(eid)                  && 
-    //          old(tap_enclave_metadata_valid)[eid]   && 
+    // ensures (valid_enclave_id(eid)                  &&
+    //          old(tap_enclave_metadata_valid)[eid]   &&
     //          cpu_enclave_id == tap_null_enc_id      &&
     //          old(tap_enclave_metadata_child_count)[eid] == 0) ==> (status == enclave_op_success);
-    ensures (valid_enclave_id(eid)                  && 
-             old(tap_enclave_metadata_valid)[eid]   && 
+    ensures (valid_enclave_id(eid)                  &&
+             old(tap_enclave_metadata_valid)[eid]   &&
              cpu_enclave_id == tap_null_enc_id) //      &&
-            //  old(tap_enclave_metadata_child_count)[eid] == 0) 
+            //  old(tap_enclave_metadata_child_count)[eid] == 0)
                 <==> (status == enclave_op_success);
-    
+
     //----------------------------------------------------------------------------//
     // The status can only be success and invalid arguement                       //
     //----------------------------------------------------------------------------//
@@ -67,16 +67,16 @@ module tap {
                         (cpu_owner_map[p] == tap_blocked_enc_id));
     ensures (status == enclave_op_success) ==>
                 (forall (p : wap_addr_t) ::
-                    old(cpu_owner_map)[p] != eid ==> 
+                    old(cpu_owner_map)[p] != eid ==>
                         cpu_owner_map[p] == old(cpu_owner_map)[p]);
     ensures (status == enclave_op_success) ==>
-                (forall (e : tap_enclave_id_t) :: 
-                    tap_enclave_metadata_valid[e] == 
+                (forall (e : tap_enclave_id_t) ::
+                    tap_enclave_metadata_valid[e] ==
                         (if (e == eid) then false
                                      else old(tap_enclave_metadata_valid)[e]));
     ensures (status == enclave_op_success) ==>
-                (forall (e : tap_enclave_id_t) :: 
-                    tap_enclave_metadata_pc[e] == 
+                (forall (e : tap_enclave_id_t) ::
+                    tap_enclave_metadata_pc[e] ==
                         (if (e == eid) then k0_vaddr_t
                                      else old(tap_enclave_metadata_pc)[e]));
     ensures (status == enclave_op_success) ==>
@@ -93,7 +93,7 @@ module tap {
     //             (e != eid) ==> tap_enclave_metadata_is_snapshot[e] == old(tap_enclave_metadata_is_snapshot)[e]);
     // ensures (forall (e : tap_enclave_id_t) ::
     //             (e != eid) ==> tap_enclave_metadata_root_snapshot[e] == old(tap_enclave_metadata_root_snapshot)[e]);
-    
+
     //----------------------------------------------------------------------//
     // State changes on success                                             //
     //----------------------------------------------------------------------//
@@ -128,7 +128,7 @@ module tap {
                   (cpu_owner_map[old(tap_enclave_metadata_addr_map)[e][va]] == e))) // ||
                   //  (valid_enclave_id(tap_enclave_metadata_root_snapshot[e]) &&
                   //   tap_enclave_metadata_valid[tap_enclave_metadata_root_snapshot[e]] &&
-                  //   cpu_owner_map[old(tap_enclave_metadata_addr_map)[e][va]] == tap_enclave_metadata_root_snapshot[e])))) 
+                  //   cpu_owner_map[old(tap_enclave_metadata_addr_map)[e][va]] == tap_enclave_metadata_root_snapshot[e]))))
                     ==>
                (forall (va: vaddr_t) ::
                 ((valid_enclave_id(e) && tap_enclave_metadata_valid[e] && tap_enclave_metadata_addr_excl[e][va]) ==>
@@ -149,21 +149,21 @@ module tap {
     //----------------------------------------------------------------------//
     // FAAS global specifications                                           //
     //----------------------------------------------------------------------//
-    
+
     // If a PA is free for an enclave, it must be owned by that enclave
     // requires (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
     //           tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_owner_map[pa] == e);
     // ensures (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
     //           tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_owner_map[pa] == e);
-    
+
     // All enclaves should have more than one child
     // requires (forall (e :tap_enclave_id_t) :: tap_enclave_metadata_child_count[e] >= 0);
     // ensures (forall (e :tap_enclave_id_t) :: tap_enclave_metadata_child_count[e] >= 0);
-    
+
     // All enclaves should have a root snapshot that is not itself
     // requires (forall (e : tap_enclave_id_t) :: valid_enclave_id(e) ==> tap_enclave_metadata_root_snapshot[e] != e);
     // ensures (forall (e : tap_enclave_id_t) :: valid_enclave_id(e) ==> tap_enclave_metadata_root_snapshot[e] != e);
-    
+
     // If the root snapshot is valid, then the child count of the root must be positive
     // requires (forall (e : tap_enclave_id_t) ::
     //           (valid_enclave_id(e) &&
@@ -242,7 +242,7 @@ module tap {
         // invariant (forall (p: wap_addr_t) ::
         //               (LT_wapa(p, pa) && old(cpu_owner_map)[p] != eid) ==>
         //                   (tap_enclave_metadata_wap_addr_free[tap_blocked_enc_id][p] == old(tap_enclave_metadata_wap_addr_free)[tap_blocked_enc_id][p]));
-        // If a PA is free for an enclave, then it should be owned by that enclave 
+        // If a PA is free for an enclave, then it should be owned by that enclave
         // NOTE: We want to carry this property past the while loop so we need to explicity specify as we're changing the free map
         // invariant (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
         //         tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_owner_map[pa] == e);
@@ -266,7 +266,7 @@ module tap {
           // blocked_wap_addr_free[pa] = true;
           // tap_enclave_metadata_wap_addr_free[tap_blocked_enc_id] = blocked_wap_addr_free;
         }
-        
+
         // Set PA to be not free for the enclave `eid`
         // eid_wap_addr_free = tap_enclave_metadata_wap_addr_free[eid];
         // eid_wap_addr_free[pa] = false;
@@ -286,7 +286,7 @@ module tap {
         // blocked_wap_addr_free[pa] = true;
         // tap_enclave_metadata_wap_addr_free[tap_blocked_enc_id] = blocked_wap_addr_free;
       }
-      
+
       // Set PA to be not free for the enclave `eid`
       // eid_wap_addr_free = tap_enclave_metadata_wap_addr_free[eid];
       // eid_wap_addr_free[pa] = false;
