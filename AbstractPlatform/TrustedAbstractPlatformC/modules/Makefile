@@ -8,14 +8,14 @@ CPU_SOURCES=$(COMMON_SOURCE) $(AP_SOURCE) $(CACHE_SOURCE) ./tap-mod-cpu.ucl
 TAP_SOURCES=$(CPU_SOURCES) $(TAP_OP_SOURCES) ./tap-mod.ucl ./tap-mod-control.ucl
 MEASURE=./measure.ucl
 
-.PHONY: tap tap-printed measure
+.PHONY: tap tap-printed measure clean
 
 tap:
 	uclid --main tap $(TAP_SOURCES)
 tap-printed:
 	rm -rf smt
 	mkdir smt
-	uclid -g smt/tap --main tap $(TAP_SOURCES)
+	time uclid -g smt/tap --main tap $(TAP_SOURCES)
 	python3 ../scripts/run_smt_parallel.py smt
 	# ./run_all_smt.sh
 measure:
@@ -23,3 +23,6 @@ measure:
 	mkdir measure
 	uclid -g measure/measure --main measure $(TAP_SOURCES) $(MEASURE)
 	python3 ../scripts/run_smt_parallel.py measure
+
+clean:
+	rm -rf smt
