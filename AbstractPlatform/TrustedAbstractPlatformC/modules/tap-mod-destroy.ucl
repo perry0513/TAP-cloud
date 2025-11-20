@@ -52,6 +52,8 @@ module tap {
     // Registers don't change except for enclave `eid`'s registers
     ensures (forall (e : tap_enclave_id_t) ::
                 (e != eid) ==> tap_enclave_metadata_regs[e] == old(tap_enclave_metadata_regs)[e]);
+    ensures (status != enclave_op_success ==> tap_enclave_metadata_key == old(tap_enclave_metadata_key));
+    ensures (status != enclave_op_success ==> tap_enclave_metadata_tag == old(tap_enclave_metadata_tag));
 
     //----------------------------------------------------------------------//
     // Status updates on success                                            //
@@ -81,6 +83,19 @@ module tap {
                                      else old(tap_enclave_metadata_pc)[e]));
     ensures (status == enclave_op_success) ==>
                 (tap_enclave_metadata_regs[eid] == kzero_regs_t);
+
+    // Only key owned by destroyed enclave is cleared
+    ensures (status == enclave_op_success) ==>
+              (forall (e: tap_enclave_id_t) ::
+                tap_enclave_metadata_key[e] ==
+                  (if (e == eid) then null_key_t
+                    else old(tap_enclave_metadata_key)[e]));
+    // Only tag owned by destroyed enclave is cleared
+    ensures (status == enclave_op_success) ==>
+              (forall (e: tap_enclave_id_t) ::
+                tap_enclave_metadata_tag[e] ==
+                  (if (e == eid) then null_tag_t
+                    else old(tap_enclave_metadata_tag)[e]));
 
     //----------------------------------------------------------------------//
     // FAAS specifications                                                  //
@@ -201,6 +216,8 @@ module tap {
     // modifies tap_enclave_metadata_wap_addr_free;
     // modifies tap_enclave_metadata_child_count;
     modifies cpu_owner_map;
+    modifies tap_enclave_metadata_key;
+    modifies tap_enclave_metadata_tag;
   {
     var va : wap_addr_t;
     var pa : wap_addr_t;
@@ -300,6 +317,8 @@ module tap {
       // tap_enclave_metadata_is_snapshot[eid]   = false;
       tap_enclave_metadata_regs[eid]          = kzero_regs_t;
       tap_enclave_metadata_pc[eid]            = k0_vaddr_t;
+      tap_enclave_metadata_key[eid]           = null_key_t;
+      tap_enclave_metadata_tag[eid]           = null_tag_t;
 
       // Reduce root snapshot's reference count if it's valid
       // if (valid_enclave_id(tap_enclave_metadata_root_snapshot[eid])) {

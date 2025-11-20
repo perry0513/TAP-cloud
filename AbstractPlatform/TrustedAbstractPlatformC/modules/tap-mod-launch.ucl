@@ -33,6 +33,8 @@ module tap {
     ensures (status != enclave_op_success ==> tap_enclave_metadata_regs == old(tap_enclave_metadata_regs));
     ensures (status != enclave_op_success ==> tap_enclave_metadata_paused == old(tap_enclave_metadata_paused));
     ensures (status != enclave_op_success ==> tap_enclave_metadata_cache_conflict == old(tap_enclave_metadata_cache_conflict));
+    ensures (status != enclave_op_success ==> tap_enclave_metadata_key == old(tap_enclave_metadata_key));
+    ensures (status != enclave_op_success ==> tap_enclave_metadata_tag == old(tap_enclave_metadata_tag));
 
     //-----------------------------------------------------------------------------------//
     // Post-conditions for changes to `eid` and all other enclave metadata is invariant  //
@@ -145,7 +147,19 @@ module tap {
               (forall (v : vaddr_t) ::
                 (tap_enclave_metadata_addr_excl[eid])[v] ==>
                 tap_addr_perm_v((tap_enclave_metadata_addr_valid[eid])[v]));
-    
+    // Only key owned by destroyed enclave is cleared
+    ensures (status == enclave_op_success) ==>
+              (forall (e: tap_enclave_id_t) ::
+                tap_enclave_metadata_key[e] ==
+                  (if (e == eid) then null_key_t
+                    else old(tap_enclave_metadata_key)[e]));
+    // Only tag owned by destroyed enclave is cleared
+    ensures (status == enclave_op_success) ==>
+              (forall (e: tap_enclave_id_t) ::
+                tap_enclave_metadata_tag[e] ==
+                  (if (e == eid) then null_tag_t
+                    else old(tap_enclave_metadata_tag)[e]));
+
     //----------------------------------------------------------------------------//
     // Changes to ownermap                                                        //
     //----------------------------------------------------------------------------//
@@ -298,6 +312,8 @@ module tap {
     // modifies tap_enclave_metadata_child_count;
     // modifies tap_enclave_metadata_root_snapshot;
     modifies cpu_owner_map;
+    modifies tap_enclave_metadata_key;
+    modifies tap_enclave_metadata_tag;
   {
     var i, k             : integer;
     var mappings_alias_v : boolean;
@@ -502,6 +518,8 @@ module tap {
       tap_enclave_metadata_regs[eid]            = kzero_regs_t;
       tap_enclave_metadata_paused[eid]          = false;
       tap_enclave_metadata_cache_conflict[eid]  = cache_conflict;
+      tap_enclave_metadata_key[eid]             = null_key_t;
+      tap_enclave_metadata_tag[eid]             = null_tag_t;
 
       // Initialize FAAS metadata
       // tap_enclave_metadata_child_count[eid]     = 0;
