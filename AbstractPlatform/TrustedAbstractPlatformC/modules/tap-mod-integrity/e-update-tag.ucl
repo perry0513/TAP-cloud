@@ -1,0 +1,26 @@
+module tap {
+  //======================================================================//
+  // Enclave operation                                                    //
+  //======================================================================//
+  procedure [inline] IntegrityEnclaveStep(
+      /* what operation?  */  op : tap_proof_op_t,
+      /* which iteration? */  iter : integer
+  )
+    returns (next_mode : mode_t, vaddr : vaddr_t, paddr : wap_addr_t, data : word_t, status : enclave_op_result_t)
+    modifies tap_kms_tag;
+  {
+    assert tap_proof_op_valid_in_enclave(op);
+
+    // in enclave-mode:
+    assume (op == tap_proof_op_update_tag);
+
+    call (status) = update_tag();
+    next_mode = mode_enclave;
+  }
+
+  next {
+    assume (tap_current_mode == mode_enclave);
+    call (tap_current_mode', tap_vaddr', tap_paddr', tap_data', tap_op_status') =
+            IntegrityEnclaveStep(tap_e_proof_op, tap_iter);
+  }
+}
