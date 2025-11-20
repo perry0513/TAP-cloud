@@ -16,5 +16,6 @@ module tap {
     tap_vaddr = k0_vaddr_t;
     tap_paddr = k0_wap_addr_t;
     tap_data = k0_word_t;
+    tap_enclave_abort = false;
   }
 }
