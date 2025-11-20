@@ -96,6 +96,7 @@ const k0_measurement_t : measurement_t = 0;
 const null_key_t : key_t = 0;
 define valid_key(k : key_t) : boolean = (k != null_key_t);
 const null_tag_t : tag_t = 0;
+define valid_tag(k : tag_t) : boolean = (k != null_tag_t);
 
 //--------------------------------------------------------------------------//
 // utility fns                                                              //
