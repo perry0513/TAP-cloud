@@ -2,8 +2,15 @@ module tap {
 //
 // Get key from KMS then encrypt and store the data in persistent storage
 //
-procedure [noinline] store_storage (start : vaddr_t, s : vaddr_t)
+procedure [noinline] _store_storage (store_vaddr : vaddr2bool_t)
   returns (status : enclave_op_result_t, abort : boolean)
+  requires (valid_enclave_id(cpu_enclave_id) &&
+            tap_enclave_metadata_valid[cpu_enclave_id]) ==>
+          (forall (v : vaddr_t) ::
+            (store_vaddr[v]) ==>
+              (tap_enclave_metadata_addr_excl[cpu_enclave_id][v]  &&
+                tap_addr_perm_r(cpu_addr_valid[v])                &&
+                cpu_owner_map[cpu_addr_map[v]] == cpu_enclave_id));
 
   //----------------------------------------------------------------------//
   // The status can only be success or failure                            //
@@ -15,12 +22,7 @@ procedure [noinline] store_storage (start : vaddr_t, s : vaddr_t)
   //----------------------------------------------------------------------//
   ensures (valid_enclave_id(cpu_enclave_id)            &&
             tap_enclave_metadata_valid[cpu_enclave_id] &&
-            valid_key(tap_kms_key[cpu_enclave_id]) &&
-            (forall (v : vaddr_t) ::
-              (LT_va(v, s)) ==>
-                (tap_enclave_metadata_addr_excl[cpu_enclave_id][PLUS_va(start, v)]   &&
-                  tap_addr_perm_r(cpu_addr_valid[PLUS_va(start, v)])                 &&
-                  cpu_owner_map[cpu_addr_map[PLUS_va(start, v)]] == cpu_enclave_id)))
+            valid_key(tap_enclave_metadata_key[cpu_enclave_id]))
             <==> (status == enclave_op_success);
 
   //----------------------------------------------------------------------//
@@ -28,76 +30,71 @@ procedure [noinline] store_storage (start : vaddr_t, s : vaddr_t)
   //----------------------------------------------------------------------//
   // Update on data
   ensures (status == enclave_op_success) ==>
-            ((forall (v : vaddr_t) ::
-              tap_storage_data[cpu_enclave_id][fresh][v] ==
-                if (LT_va(v, s))
-                then cpu_mem[cpu_addr_map[PLUS_va(start, v)]]
-                else k0_word_t) &&
-            tap_storage_data[cpu_enclave_id][stale] == old(tap_storage_data)[cpu_enclave_id][fresh]);
-  // Update on size
+            (forall (v : vaddr_t) ::
+              (store_vaddr[v] && tap_enclave_metadata_addr_excl[cpu_enclave_id][v] ==>
+                tap_storage_mem[cpu_enclave_id][fresh][v] == cpu_mem[cpu_addr_map[v]]) &&
+            tap_storage_mem[cpu_enclave_id][stale] == old(tap_storage_mem)[cpu_enclave_id][fresh]);
+  // Update on store filter
   ensures (status == enclave_op_success) ==>
-            (tap_storage_size[cpu_enclave_id][fresh] == s &&
-              tap_storage_size[cpu_enclave_id][stale] == old(tap_storage_size)[cpu_enclave_id][fresh]);
+            (tap_storage_addr_valid[cpu_enclave_id][fresh] == store_vaddr &&
+              tap_storage_addr_valid[cpu_enclave_id][stale] == old(tap_storage_addr_valid)[cpu_enclave_id][fresh]);
   // Update on key
   ensures (status == enclave_op_success) ==>
-            (tap_storage_key[cpu_enclave_id][fresh] == tap_kms_key[cpu_enclave_id] &&
+            (tap_storage_key[cpu_enclave_id][fresh] == tap_enclave_metadata_key[cpu_enclave_id] &&
               tap_storage_key[cpu_enclave_id][stale] == old(tap_storage_key)[cpu_enclave_id][fresh]);
   // Update on tag
   ensures (status == enclave_op_success) ==>
-            (tap_storage_tag[cpu_enclave_id][fresh] == tap_kms_tag[cpu_enclave_id] &&
+            (tap_storage_tag[cpu_enclave_id][fresh] == tap_enclave_metadata_tag[cpu_enclave_id] &&
               tap_storage_tag[cpu_enclave_id][stale] == old(tap_storage_tag)[cpu_enclave_id][fresh]);
   // All other entries stay the same
   ensures (status == enclave_op_success) ==>
             (forall (e : tap_enclave_id_t) ::
               (e != cpu_enclave_id) ==>
-                (tap_storage_size[e] == old(tap_storage_size)[e] &&
+                (tap_storage_addr_valid[e] == old(tap_storage_addr_valid)[e] &&
                   tap_storage_key[e] == old(tap_storage_key)[e] &&
-                  tap_storage_data[e] == old(tap_storage_data)[e] &&
+                  tap_storage_mem[e] == old(tap_storage_mem)[e] &&
                   tap_storage_tag[e] == old(tap_storage_tag)[e]));
-  // TODO: changes to tap_kms_tag
+  // Changes to tap_kms_tag
   ensures (status == enclave_op_success) ==>
             (forall (e : tap_enclave_id_t) ::
-              tap_kms_tag[e] ==
+              tap_enclave_metadata_tag[e] ==
                 if (e == cpu_enclave_id)
-                then next_tag(old(tap_kms_tag)[e])
-                else old(tap_kms_tag)[e]);
+                then next_tag(old(tap_enclave_metadata_tag)[e])
+                else old(tap_enclave_metadata_tag)[e]);
+  ensures (status == enclave_op_success) ==> valid_tag(tap_enclave_metadata_tag[cpu_enclave_id]);
 
   //----------------------------------------------------------------------//
   // Nothing changes on failure                                           //
   //----------------------------------------------------------------------//
-  ensures (status != enclave_op_success ==> tap_storage_data == old(tap_storage_data));
-  ensures (status != enclave_op_success ==> tap_storage_size == old(tap_storage_size));
+  ensures (status != enclave_op_success ==> tap_storage_mem == old(tap_storage_mem));
+  ensures (status != enclave_op_success ==> tap_storage_addr_valid == old(tap_storage_addr_valid));
   ensures (status != enclave_op_success ==> tap_storage_key == old(tap_storage_key));
   ensures (status != enclave_op_success ==> tap_storage_tag == old(tap_storage_tag));
-  ensures (status != enclave_op_success ==> tap_kms_tag == old(tap_kms_tag));
 
   //----------------------------------------------------------------------//
   // Abort conditions                                                     //
   //----------------------------------------------------------------------//
   ensures (valid_enclave_id(cpu_enclave_id) &&
             tap_enclave_metadata_valid[cpu_enclave_id] &&
-            !valid_key(tap_kms_key[cpu_enclave_id]))
+            !valid_key(tap_enclave_metadata_key[cpu_enclave_id]))
            <==> abort;
 
   //----------------------------------------------------------------------//
   // Modifies statements                                                  //
   //----------------------------------------------------------------------//
-  modifies tap_storage_data;
-  modifies tap_storage_size;
+  modifies tap_storage_mem;
+  modifies tap_storage_addr_valid;
   modifies tap_storage_key;
   modifies tap_storage_tag;
-  modifies tap_kms_tag;
+  modifies tap_enclave_metadata_tag;
 {
   var eid : tap_enclave_id_t;
   var va : vaddr_t;
-  var stored_data : storage_data_t;
-  var data : [boolean]storage_data_t;
-  var size : [boolean]vaddr_t;
+  var stored_mem : storage_mem_t;
+  var mem : [boolean]storage_mem_t;
+  var valid : [boolean]vaddr2bool_t;
   var key : [boolean]key_t;
   var tag : [boolean]tag_t;
-  var k : key_t;
-  var t : tag_t;
-  var i : vaddr_t;
 
   eid = cpu_enclave_id;
 
@@ -110,116 +107,149 @@ procedure [noinline] store_storage (start : vaddr_t, s : vaddr_t)
     status = enclave_op_failed;
   }
 
-  // Get key from KMS. This updates the metadata key
   if (status != enclave_op_failed) {
-    call (status, k, t) = get_key_and_tag();
-    if (status == enclave_op_failed) {
-      assert(!valid_key(k));
+    if (!valid_key(tap_enclave_metadata_key[eid])) {
+      status = enclave_op_failed;
       abort = true;
     }
   }
 
-  // Check if virtual addresses in [start, start + s) are private and readable
-  if (status != enclave_op_failed) {
-    i = k0_vaddr_t;
-    while (LT_va(i, s) && status != enclave_op_failed)
-      // invariant (LTE_va(i, s));
-      invariant (status != enclave_op_failed ==>
-                    (forall (v : vaddr_t) ::
-                      LT_va(v, i) ==>
-                        tap_enclave_metadata_addr_excl[eid][PLUS_va(start, v)]));
-      invariant (status != enclave_op_failed ==>
-                    (forall (v : vaddr_t) ::
-                      LT_va(v, i) ==>
-                        tap_addr_perm_r(cpu_addr_valid[PLUS_va(start, v)])));
-      invariant (status != enclave_op_failed ==>
-                    (forall (v : vaddr_t) ::
-                      LT_va(v, i) ==>
-                        cpu_owner_map[cpu_addr_map[PLUS_va(start, v)]] == eid));
-      invariant (status == enclave_op_success || status == enclave_op_failed);
-    {
-      va = PLUS_va(start, i);
-      if (!tap_enclave_metadata_addr_excl[eid][va] ||
-          !tap_addr_perm_r(cpu_addr_valid[va])     ||
-          cpu_owner_map[cpu_addr_map[va]] != eid) {
-        status = enclave_op_failed;
-      }
-      i = PLUS_va(i, k1_vaddr_t);
-    }
-
-    // Alternative implementation
-    // NOTE: probably does not work because start + s might overflow
-    // va = start;
-    // while (LTE_va(start, va) && LT_va(va, PLUS_va(start, s)) && status != enclave_op_failed)
-    //   invariant (status != enclave_op_failed ==>
-    //                 (forall (v : vaddr_t) ::
-    //                   (LT_va(start, v) && LT_va(v, va)) ==>
-    //                     (tap_enclave_metadata_addr_excl[eid][v])));
-    //   invariant (status != enclave_op_failed ==>
-    //                 (forall (v : vaddr_t) ::
-    //                   (LT_va(start, v) && LT_va(v, va)) ==>
-    //                     (tap_addr_perm_r(cpu_addr_valid[v]))));
-    //   invariant (status != enclave_op_failed ==>
-    //                 (forall (v : vaddr_t) ::
-    //                   (LT_va(start, v) && LT_va(v, va)) ==>
-    //                     (cpu_owner_map[cpu_addr_map[v]] == eid)));
-    //   invariant (status == enclave_op_success || status == enclave_op_failed);
-    // {
-    //   if (!tap_enclave_metadata_addr_excl[eid][va] ||
-    //       !tap_addr_perm_r(cpu_addr_valid[va]) ||
-    //       cpu_owner_map[cpu_addr_map[va]] != eid) {
-    //     status = enclave_op_failed;
-    //   }
-    //   va = PLUS_va(va, k1_vaddr_t);
-    // }
-    // if (!tap_enclave_metadata_addr_excl[eid][start] ||
-    //     !tap_addr_perm_r(cpu_addr_valid[start]) ||
-    //     cpu_owner_map[cpu_addr_map[start]] != eid) {
-    //   status = enclave_op_failed;
-    // }
-  }
-
   if (status != enclave_op_failed) {
     // Move the fresh data to stale
-    data[stale] = tap_storage_data[eid][fresh];
-    size[stale] = tap_storage_size[eid][fresh];
+    mem[stale] = tap_storage_mem[eid][fresh];
+    valid[stale] = tap_storage_addr_valid[eid][fresh];
     key[stale] = tap_storage_key[eid][fresh];
     tag[stale] = tap_storage_tag[eid][fresh];
 
     // Update the tag before storing
     // Without this rollback attack would be possible
-    tap_kms_tag[eid] = next_tag(tap_kms_tag[eid]);
+    tap_enclave_metadata_tag[eid] = next_tag(tap_enclave_metadata_tag[eid]);
 
     // Store the data into storage
-    size[fresh] = s;
-    key[fresh] = k;
-    tag[fresh] = tap_kms_tag[eid];
+    valid[fresh] = store_vaddr;
+    key[fresh] = tap_enclave_metadata_key[eid];
+    tag[fresh] = tap_enclave_metadata_tag[eid];
 
-    // Initialize stored_data as all zeros
-    // Only update stored_data[i] for i < s
-    assume (forall(va : vaddr_t) :: stored_data[va] == k0_word_t);
-    i = k0_vaddr_t;
-    while (LT_va(i, s))
+    va = k0_vaddr_t;
+    while (LT_va(va, kmax_vaddr_t))
       invariant (forall (v : vaddr_t) ::
-                  (LT_va(v, i)) ==>
-                    stored_data[v] == cpu_mem[cpu_addr_map[PLUS_va(start, v)]]);
-      invariant (forall (v : vaddr_t) ::
-                  (!LT_va(v, i)) ==>
-                    stored_data[v] == k0_word_t);
+                  LT_va(v, va) ==>
+                    (store_vaddr[v] && tap_enclave_metadata_addr_excl[eid][v]) ==>
+                      stored_mem[v] == cpu_mem[cpu_addr_map[v]]);
     {
-      // Store the data at va
-      va = PLUS_va(start, i);
-      stored_data[i] = cpu_mem[cpu_addr_map[va]];
-      i = PLUS_va(i, k1_vaddr_t);
+      if (store_vaddr[va]) {
+        assert tap_enclave_metadata_addr_excl[eid][va];
+        stored_mem[va] = cpu_mem[cpu_addr_map[va]];
+      }
+      va = PLUS_va(va, k1_vaddr_t);
     }
-    data[fresh] = stored_data;
+    if (store_vaddr[va]) {
+      assert tap_enclave_metadata_addr_excl[eid][va];
+      stored_mem[va] = cpu_mem[cpu_addr_map[va]];
+    }
 
-    tap_storage_data[eid] = data;
-    tap_storage_size[eid] = size;
+    mem[fresh] = stored_mem;
+
+    tap_storage_mem[eid] = mem;
+    tap_storage_addr_valid[eid] = valid;
     tap_storage_key[eid] = key;
     tap_storage_tag[eid] = tag;
     assert (status == enclave_op_success);
   }
+}
 
+//
+// Utility function
+// Calls _store_storage with vaddr and size depending on cpu state
+//
+procedure [inline] store_storage ()
+  returns (status : enclave_op_result_t, abort : boolean)
+  modifies cpu_regs;
+  modifies cpu_pc;
+  modifies cpu_addr_valid;
+  modifies cache_valid_map;
+  modifies cache_tag_map;
+  modifies tap_enclave_metadata_addr_valid;
+  modifies tap_storage_mem;
+  modifies tap_storage_addr_valid;
+  modifies tap_storage_key;
+  modifies tap_storage_tag;
+  modifies tap_enclave_metadata_key;
+  modifies tap_enclave_metadata_tag;
+  modifies tap_kms_tag;
+{
+  var r0, r1  : word_t;
+  var eid     : tap_enclave_id_t;
+  var pc_pa   : wap_addr_t;
+  var pc_op   : word_t;
+  var excp    : exception_t;
+  var hit     : boolean;
+  var way     : cache_way_index_t;
+  var start   : vaddr_t;
+  var size    : vaddr_t;
+  var store   : vaddr2bool_t;
+
+  status = enclave_op_success;
+  abort = false;
+  eid = cpu_enclave_id;
+
+  call (status, abort) = get_key_and_tag();
+
+  if (status != enclave_op_failed) {
+    assert (valid_key(tap_kms_key[eid]) && tap_enclave_metadata_valid[eid]);
+
+    pc_pa = cpu_addr_map[cpu_pc];
+    assert cpu_owner_map[pc_pa] == eid ||
+            (valid_enclave_id(eid) &&
+              tap_enclave_metadata_valid[eid]);
+    havoc way;
+    assume valid_cache_way_index(way);
+    call (pc_op, excp, hit) = fetch_va(cpu_pc, way);
+
+    // two register sources.
+    r0 = cpu_regs[uf_cpu_r0_index(pc_op)];
+    r1 = cpu_regs[uf_cpu_r1_index(pc_op)];
+
+    store = uf_store_vaddr(r0, r1);
+
+    assume (valid_enclave_id(eid) &&
+            tap_enclave_metadata_valid[eid]) ==>
+            (forall (v : vaddr_t) ::
+              (store[v]) ==>
+                (tap_enclave_metadata_addr_excl[eid][v]  &&
+                  tap_addr_perm_r(cpu_addr_valid[v])     &&
+                  cpu_owner_map[cpu_addr_map[v]] == eid));
+
+    call (status, abort) = _store_storage(store);
+    assert (status == enclave_op_success);
+    assert (valid_tag(tap_enclave_metadata_tag[eid]));
+
+    // Update PC if not aborted
+    if (!abort) {
+      call set_cpu_pc(PLUS_va(cpu_pc, k1_vaddr_t));
+      assume tap_addr_perm_x(cpu_addr_valid[cpu_pc]);
+      assume tap_enclave_metadata_addr_excl[eid][cpu_pc];
+
+      // Sanity check. REMOVED: attacker-controlled enclave does not guarantee this
+      // assert cpu_owner_map[cpu_addr_map[cpu_pc]] == eid;
+    }
+  }
+
+
+  // Update tag
+  if (status != enclave_op_failed) {
+    call (status, abort) = update_tag();
+    assert (status == enclave_op_success);
+    assert (valid_tag(tap_kms_tag[eid]));
+  }
+
+  assert (abort ==> status != enclave_op_success);
+  assert (valid_enclave_id(eid) &&
+          tap_enclave_metadata_valid[eid] &&
+          !valid_key(tap_kms_key[eid])) <==> abort;
+  assert (valid_enclave_id(eid) &&
+          tap_enclave_metadata_valid[eid] &&
+          valid_key(tap_kms_key[eid])) <==>
+            (status == enclave_op_success);
 }
 }
