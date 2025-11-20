@@ -1,0 +1,40 @@
+module tap {
+  procedure [inline] IntegrityAdversarialStep(
+      /* mode       */ mode       : mode_t,
+      /* EuT        */ eid        : tap_enclave_id_t,
+      /* Adversary  */ r_eid      : tap_enclave_id_t,
+      /* Parent     */ r_parent_eid : tap_enclave_id_t,
+      /* args       */ r_regs     : regs_t,
+      /* operation  */ op         : tap_proof_op_t,
+      /* dead       */ dead       : boolean,
+      /* tampered   */ tampered   : boolean
+  )
+    returns (next_mode : mode_t, enclave_dead : boolean, status : enclave_op_result_t, kms_tampered : boolean)
+    modifies tap_kms_key;
+    // modifies tap_kms_tag;
+  {
+    // var status            : enclave_op_result_t;
+
+    // the "default" value which may be overwritten by enter/resume
+    next_mode = mode;
+    // the "default" value which may be overwritten by destroy.
+    enclave_dead = dead;
+    kms_tampered = tampered;
+
+    assume (op == tap_proof_op_delete_key);
+
+    call (status) = delete_key(r_eid);
+    if (r_eid == eid && status == enclave_op_success) {
+        kms_tampered = true;
+    }
+  }
+
+  //======================================================================//
+  // Transition relation                                                  //
+  //======================================================================//
+  next {
+    assume (tap_current_mode == mode_untrusted);
+    call (tap_current_mode', tap_enclave_dead', tap_op_status', tap_kms_tampered') =
+      IntegrityAdversarialStep(tap_current_mode, tap_eid, tap_r_eid, tap_r_parent_eid, tap_r_regs, tap_r_proof_op, tap_enclave_dead, tap_kms_tampered);
+  }
+}

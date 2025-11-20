@@ -1,0 +1,42 @@
+module tap {
+  procedure [inline] IntegrityAdversarialStep(
+      /* mode       */ mode       : mode_t,
+      /* EuT        */ eid        : tap_enclave_id_t,
+      /* Adversary  */ r_eid      : tap_enclave_id_t,
+      /* Parent     */ r_parent_eid : tap_enclave_id_t,
+      /* args       */ r_regs     : regs_t,
+      /* operation  */ op         : tap_proof_op_t,
+      /* dead       */ dead       : boolean,
+      /* tampered   */ rolledback : boolean
+  )
+    returns (next_mode : mode_t, enclave_dead : boolean, status : enclave_op_result_t, storage_rolledback : boolean)
+    modifies tap_storage_mem;
+    modifies tap_storage_addr_valid;
+    modifies tap_storage_key;
+    modifies tap_storage_tag;
+  {
+    // var status            : enclave_op_result_t;
+
+    // the "default" value which may be overwritten by enter/resume
+    next_mode = mode;
+    // the "default" value which may be overwritten by destroy.
+    enclave_dead = dead;
+    storage_rolledback = rolledback;
+
+    assume (op == tap_proof_op_rollback_storage);
+
+    call (status) = rollback_storage(r_eid);
+    if (r_eid == eid && status == enclave_op_success) {
+        storage_rolledback = true;
+    }
+  }
+
+  //======================================================================//
+  // Transition relation                                                  //
+  //======================================================================//
+  next {
+    assume (tap_current_mode == mode_untrusted);
+    call (tap_current_mode', tap_enclave_dead', tap_op_status', tap_storage_rolledback') =
+      IntegrityAdversarialStep(tap_current_mode, tap_eid, tap_r_eid, tap_r_parent_eid, tap_r_regs, tap_r_proof_op, tap_enclave_dead, tap_storage_rolledback);
+  }
+}
