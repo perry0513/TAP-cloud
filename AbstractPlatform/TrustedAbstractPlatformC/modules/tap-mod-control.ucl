@@ -25,13 +25,14 @@ module tap {
     // tap_addr_valid_proofs_verif = verify(tap_addr_valid_proofs);            //passes
     init_havoc_verif = verify(InitialHavoc);                                //passes
 
-    store_storage_verif = verify(store_storage);
-    load_storage_verif = verify(load_storage);
+    _store_storage_verif = verify(_store_storage);
+    _load_storage_verif = verify(_load_storage);
 
     create_key_verif = verify(create_key);
     delete_key_verif = verify(delete_key);
     transfer_key_and_tag_verif = verify(transfer_key_and_tag);
     get_key_and_tag_verif = verify(get_key_and_tag);
+    update_tag_verif = verify(update_tag);
 
     tamper_storage_verif = verify(tamper_storage);
     rollback_storage_verif = verify(rollback_storage);
