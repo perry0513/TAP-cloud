@@ -5,7 +5,8 @@ module tap {
       /* Adversary  */ r_eid      : tap_enclave_id_t,
       /* Parent     */ r_parent_eid : tap_enclave_id_t,
       /* args       */ r_regs     : regs_t,
-      /* operation  */ op         : tap_proof_op_t
+      /* operation  */ op         : tap_proof_op_t,
+      /* dead       */ dead       : boolean
   )
     returns (next_mode : mode_t, enclave_dead : boolean)
 
@@ -61,7 +62,7 @@ module tap {
     next_mode = mode_untrusted;
 
     // Enclave cannnot be destroyed by the adversary
-    enclave_dead = false;
+    enclave_dead = dead;
 
     assume (op == tap_proof_op_compute);
 
@@ -75,7 +76,7 @@ module tap {
         call (r_excp, hit) = store_va(r_vaddr, r_word, way);
       }
       (adv_comp == adv_reg_tamper) : {
-        // Tamper registers and pc 
+        // Tamper registers and pc
         call havoc_cpu_pc();
         call havoc_cpu_regs();
       }
@@ -101,7 +102,7 @@ module tap {
         havoc r_vaddr;
         havoc r_paddr;
         havoc r_valid;
-        
+
         call (status) = set_enclave_addr_map(r_eid, r_vaddr, r_valid, r_paddr);
       }
     esac
@@ -109,10 +110,10 @@ module tap {
 
   //======================================================================//
   // Transition relation                                                  //
-  //======================================================================//  
+  //======================================================================//
   next {
     assume (tap_current_mode == mode_untrusted);
     call (tap_current_mode', tap_enclave_dead') =
-      IntegrityAdversarialStep(tap_current_mode, tap_eid, tap_r_eid, tap_r_parent_eid, tap_r_regs, tap_r_proof_op);
+      IntegrityAdversarialStep(tap_current_mode, tap_eid, tap_r_eid, tap_r_parent_eid, tap_r_regs, tap_r_proof_op, tap_enclave_dead);
   }
 }

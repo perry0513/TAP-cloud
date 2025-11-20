@@ -5,7 +5,8 @@ module tap {
       /* Adversary  */ r_eid      : tap_enclave_id_t,
       /* Parent     */ r_parent_eid : tap_enclave_id_t,
       /* args       */ r_regs     : regs_t,
-      /* operation  */ op         : tap_proof_op_t
+      /* operation  */ op         : tap_proof_op_t,
+      /* dead       */ dead       : boolean
   )
     returns (next_mode : mode_t, enclave_dead : boolean)
     modifies untrusted_addr_valid;
@@ -54,16 +55,16 @@ module tap {
     // the "default" value which may be overwritten by enter/resume
     next_mode = mode;
     // the "default" value which may be overwritten by destroy.
-    enclave_dead = false;
+    enclave_dead = dead;
 
     assume (op == tap_proof_op_resume);
-    
+
     // resume
     call (status) = resume(r_eid);
     // mode == mode_enclave means we are in trace_2.
     assert (mode == mode_enclave ==> status == enclave_op_success);
-    if (status == enclave_op_success && r_eid == eid) { 
-        next_mode = mode_enclave; 
+    if (status == enclave_op_success && r_eid == eid) {
+        next_mode = mode_enclave;
     }
     assert ((status == enclave_op_success && r_eid == eid)
             ==> next_mode == mode_enclave);
@@ -75,6 +76,6 @@ module tap {
   next {
     assume (tap_current_mode == mode_untrusted);
     call (tap_current_mode', tap_enclave_dead') =
-      IntegrityAdversarialStep(tap_current_mode, tap_eid, tap_r_eid, tap_r_parent_eid, tap_r_regs, tap_r_proof_op);
-  } 
+      IntegrityAdversarialStep(tap_current_mode, tap_eid, tap_r_eid, tap_r_parent_eid, tap_r_regs, tap_r_proof_op, tap_enclave_dead);
+  }
 }
