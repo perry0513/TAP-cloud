@@ -5,9 +5,17 @@ module tap {
       /* Adversary  */ r_eid      : tap_enclave_id_t,
       /* Parent     */ r_parent_eid : tap_enclave_id_t,
       /* args       */ r_regs     : regs_t,
-      /* operation  */ op         : tap_proof_op_t
+      /* operation  */ op         : tap_proof_op_t,
+      /* dead       */ dead       : boolean,
+      /* abort      */ abort      : boolean,
+      /* addr_valid */ e_addr_valid      : addr_valid_t,
+      /* addr_map   */ e_addr_map        : addr_map_t,
+      /* excl_vaddr */ e_excl_vaddr      : excl_vaddr_t,
+      /* excl_map   */ e_excl_map        : excl_map_t,
+      /* container  */ e_container_data  : container_data_t,
+      /* entrypoint */ e_entrypoint      : vaddr_t
   )
-    returns (next_mode : mode_t, enclave_dead : boolean)
+    returns (next_mode : mode_t, enclave_dead : boolean, status : enclave_op_result_t, enclave_abort : boolean)
     modifies untrusted_addr_valid;
     modifies untrusted_addr_map;
     modifies untrusted_regs;
@@ -33,8 +41,9 @@ module tap {
     modifies cpu_owner_map;
     modifies cpu_enclave_id;
     modifies cache_valid_map, cache_tag_map;
+    modifies tap_enclave_metadata_key;
+    modifies tap_enclave_metadata_tag;
   {
-    var status            : enclave_op_result_t;
     var r_addr_valid      : addr_valid_t;
     var r_addr_map        : addr_map_t;
     var r_excl_vaddr      : excl_vaddr_t;
@@ -54,15 +63,27 @@ module tap {
     // the "default" value which may be overwritten by enter/resume
     next_mode = mode;
     // the "default" value which may be overwritten by destroy.
-    enclave_dead = false;
+    enclave_dead = dead;
+    enclave_abort = abort;
+    status = enclave_op_success;
 
     assume (op == tap_proof_op_launch);
-    
-  	// launch
-  	call InitOSMem(r_container_valid, r_container_data);
-  	call (status) = launch(r_eid, r_addr_valid, r_addr_map, 
-  	                      r_excl_vaddr, r_excl_map, r_entrypoint);
-  	assert (r_eid == eid) ==> (status != enclave_op_success);
+
+    if (r_eid != eid) {
+      call InitOSMem(r_container_valid, r_container_data);
+      call (status) = launch(r_eid, r_addr_valid, r_addr_map,
+                              r_excl_vaddr, r_excl_map, r_entrypoint);
+    } else { // r_eid == eid
+      call InitOSMem(e_excl_map, e_container_data);
+      call (status) = launch(eid, e_addr_valid, e_addr_map,
+                              e_excl_vaddr, e_excl_map, e_entrypoint);
+      assert (!enclave_dead ==> status != enclave_op_success);
+      assume (enclave_dead <==> status == enclave_op_success);
+      if (status == enclave_op_success) {
+        enclave_dead = false;
+        enclave_abort = false;
+      }
+    }
   }
 
   //======================================================================//
@@ -70,7 +91,8 @@ module tap {
   //======================================================================//
   next {
     assume (tap_current_mode == mode_untrusted);
-    call (tap_current_mode', tap_enclave_dead') =
-      IntegrityAdversarialStep(tap_current_mode, tap_eid, tap_r_eid, tap_r_parent_eid, tap_r_regs, tap_r_proof_op);
-  } 
+    call (tap_current_mode', tap_enclave_dead', tap_op_status', tap_enclave_abort') =
+      IntegrityAdversarialStep(tap_current_mode, tap_eid, tap_r_eid, tap_r_parent_eid, tap_r_regs, tap_r_proof_op, tap_enclave_dead, tap_enclave_abort,
+                               tap_e_addr_valid, tap_e_addr_map, tap_e_excl_vaddr, tap_e_excl_map, tap_e_container_data, tap_e_entrypoint);
+  }
 }
