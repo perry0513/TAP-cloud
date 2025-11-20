@@ -1,0 +1,50 @@
+module tap {
+  //======================================================================//
+  // Enclave operation                                                    //
+  //======================================================================//
+  procedure [inline] EnclaveStep(
+      /* Current mode */      mode              : mode_t,
+      /* Secret Enclave */    eid               : tap_enclave_id_t,
+      /* Operation. */        op                : tap_proof_op_t)
+
+      returns (
+          /* mode     */  next_mode : mode_t,
+          /* read     */  load_addr : vaddr_t, l_way : cache_way_index_t,
+          /* store    */  store_addr : vaddr_t, store_data : word_t, s_way : cache_way_index_t
+      )
+      modifies cpu_regs;
+      modifies cpu_pc;
+      modifies cpu_addr_valid;
+      modifies cache_valid_map;
+      modifies cache_tag_map;
+      modifies tap_enclave_metadata_addr_valid;
+      modifies tap_storage_mem;
+      modifies tap_storage_addr_valid;
+      modifies tap_storage_key;
+      modifies tap_storage_tag;
+      modifies tap_enclave_metadata_key;
+      modifies tap_enclave_metadata_tag;
+      modifies tap_kms_tag;
+  {
+      var status : enclave_op_result_t;
+      var abort  : boolean;
+
+      // in enclave-mode:
+      assume (op == tap_proof_op_store_storage);
+
+      call (status, abort) = store_storage();
+      // if (status == enclave_op_success) {
+      //   // If success, overwrite the fresh entry so it is no longer tampered
+      //   storage_tampered = false;
+      // }
+      next_mode = mode_enclave;
+  }
+
+  //======================================================================//
+  // Transition relation                                                  //
+  //======================================================================//
+  next {
+    assume (tap_current_mode == mode_enclave);
+    call (tap_current_mode', tap_load_addr', tap_l_way', tap_store_addr', tap_store_data', tap_s_way') = EnclaveStep(tap_current_mode, tap_eid, tap_e_proof_op);
+  }
+}
