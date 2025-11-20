@@ -11,7 +11,7 @@ module tap {
     /* Operation. */        op                : tap_proof_op_t)
 
     returns (
-        /* mode     */  next_mode : mode_t, 
+        /* mode     */  next_mode : mode_t,
         /* read     */  load_addr : vaddr_t, l_way : cache_way_index_t,
         /* store    */  store_addr : vaddr_t, store_data : word_t, s_way : cache_way_index_t
     )
@@ -32,6 +32,8 @@ module tap {
     modifies cpu_enclave_id;
     modifies cpu_addr_map;
     modifies cpu_addr_valid;
+    modifies tap_enclave_metadata_key;
+    modifies tap_enclave_metadata_tag;
   {
     var vaddr  : vaddr_t;
     var word   : word_t;
@@ -76,23 +78,23 @@ module tap {
 
           // stay in the same mode.
           next_mode = mode;
-      } 
+      }
       (op == tap_proof_op_exit) : {
           call (status) = exit();
           assert status == enclave_op_success;
-          // switch back to the observer. 
+          // switch back to the observer.
           next_mode = mode_untrusted;
-      } 
+      }
       (op == tap_proof_op_pause) : {
           call (status) = pause();
           assert status == enclave_op_success;
-          // switch back to the observer. 
+          // switch back to the observer.
           next_mode = mode_untrusted;
       }
       // (op == tap_proof_op_snapshot) : {
       //   call (status) = snapshot();
 
-      //   // Switch back to the observer if success 
+      //   // Switch back to the observer if success
       //   if (status == enclave_op_success) {
       //     next_mode = mode_untrusted;
       //   } else {
