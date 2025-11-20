@@ -16,7 +16,7 @@ module tap {
     /* mem. to read.     */ l_vaddr           : vaddr_t,
     /* mem to write      */ s_vaddr           : vaddr_t,
     /* data to write     */ s_data            : word_t,
-    /* pt entry to read  */ r_pt_eid          : tap_enclave_id_t, 
+    /* pt entry to read  */ r_pt_eid          : tap_enclave_id_t,
     /* pt entry to read  */ r_pt_va           : vaddr_t,
     /* pt eid            */ pt_eid            : tap_enclave_id_t,
     /* pt vaddr          */ pt_vaddr          : vaddr_t,
@@ -30,21 +30,28 @@ module tap {
     /* Container Data    */ r_container_data  : container_data_t,
     /* Entrypoint        */ r_entrypoint      : vaddr_t,
     /* blocked mem       */ r_bmap            : excl_map_t,
-    /* ways to change.   */ l_way, s_way      : cache_way_index_t)
+    /* ways to change.   */ l_way, s_way      : cache_way_index_t,
+    /* addr_valid        */ e_addr_valid      : addr_valid_t,
+    /* addr_map          */ e_addr_map        : addr_map_t,
+    /* excl_vaddr        */ e_excl_vaddr      : excl_vaddr_t,
+    /* excl_map          */ e_excl_map        : excl_map_t,
+    /* container         */ e_container_data  : container_data_t,
+    /* entrypoint        */ e_entrypoint      : vaddr_t,
+    /* dead              */ dead              : boolean)
 
     returns (observation: word_t, next_mode : mode_t, enclave_dead : boolean, status : enclave_op_result_t, excp_1 : exception_t, excp_2 : exception_t, hit_1 : boolean, hit_2 : boolean)
     // PC stays reasonable.
     // Don't mess up TAP invariants.
     requires valid_regindex(r_read);
     requires valid_regindex(r_write);
-    requires (observer == k_mem_observer_t   || 
+    requires (observer == k_mem_observer_t   ||
               observer == k_cache_observer_t ||
               observer == k_pt_observer_t);
 
     requires valid_cache_way_index(s_way);
     requires valid_cache_way_index(l_way);
 
-    ensures (op == tap_proof_op_compute) ==> 
+    ensures (op == tap_proof_op_compute) ==>
                 (cpu_enclave_id == old(cpu_enclave_id) &&
                  tap_enclave_metadata_valid == old(tap_enclave_metadata_valid) &&
                  tap_enclave_metadata_addr_excl == old(tap_enclave_metadata_addr_excl));
@@ -73,11 +80,13 @@ module tap {
     modifies cpu_pc;
     modifies cpu_regs;
     modifies cpu_owner_map;
+    modifies tap_enclave_metadata_key;
+    modifies tap_enclave_metadata_tag;
   {
       // "default" for the next mode.
       next_mode = mode;
       // "default" for whether we kill enclave eid.
-      enclave_dead = false;
+      enclave_dead = dead;
 
       // start with a dummy observation.
       observation = k0_word_t;
@@ -91,13 +100,25 @@ module tap {
 
       assume (op == tap_proof_op_launch);
 
-      assume !r_excl_map[cpu_addr_map[cpu_pc]];
-      call InitOSMem(r_container_valid, r_container_data);
-      call (status) = launch(r_eid, r_addr_valid, r_addr_map, 
-                            r_excl_vaddr, r_excl_map, r_entrypoint);
+      if (r_eid != eid) {
+        assume !r_excl_map[cpu_addr_map[cpu_pc]];
+        call InitOSMem(r_container_valid, r_container_data);
+        call (status) = launch(r_eid, r_addr_valid, r_addr_map,
+                              r_excl_vaddr, r_excl_map, r_entrypoint);
+      } else { // r_eid == eid
+        call InitOSMem(e_excl_map, e_container_data);
+        call (status) = launch(eid, e_addr_valid, e_addr_map,
+                                e_excl_vaddr, e_excl_map, e_entrypoint);
+        assert (!enclave_dead ==> status != enclave_op_success);
+        assume (enclave_dead <==> status == enclave_op_success);
+        if (status == enclave_op_success) {
+          enclave_dead = false;
+          // enclave_abort = false;
+        }
+      }
 
       // Sanity check: Should not relaunch `eid`
-      assert (r_eid == eid) ==> (status != enclave_op_success);
+      // assert (r_eid == eid) ==> (status != enclave_op_success);
   }
 
   //======================================================================//
@@ -108,13 +129,14 @@ module tap {
     call (tap_observation', tap_current_mode',
               tap_enclave_dead', tap_status',
               tap_excp_1', tap_excp_2',
-              tap_hit_1', tap_hit_2') = ObserverStep(
+              tap_hit_1', tap_hit_2') =
+                ObserverStep(
                   tap_observer, tap_current_mode,
                   tap_eid, tap_r_eid,
                   tap_r_parent_eid,
-                  tap_r_proof_op, 
+                  tap_r_proof_op,
                   tap_r_pc, tap_r_read,
-                  tap_r_write, tap_r_data, 
+                  tap_r_write, tap_r_data,
                   tap_l_vaddr, tap_s_vaddr, tap_s_data,
                   tap_r_pt_eid, tap_r_pt_va,
                   tap_pt_eid, tap_pt_vaddr,
@@ -123,6 +145,13 @@ module tap {
                   tap_r_excl_vaddr, tap_r_excl_map,
                   tap_r_container_valid, tap_r_container_data,
                   tap_r_entrypoint, tap_r_bmap,
-                  tap_r_l_way, tap_r_s_way);
+                  tap_r_l_way, tap_r_s_way,
+                  tap_e_addr_valid,
+                  tap_e_addr_map,
+                  tap_e_excl_vaddr,
+                  tap_e_excl_map,
+                  tap_e_container_data,
+                  tap_e_entrypoint,
+                  tap_enclave_dead);
   }
 }
