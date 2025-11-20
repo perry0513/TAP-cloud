@@ -20,13 +20,24 @@ module tap {
   input tap_eid           : tap_enclave_id_t;
   input tap_r_regs        : regs_t;
 
-  // Inputs from integrity
-  input tap_r_proof_op    : tap_proof_op_t;
-  input tap_e_proof_op    : tap_proof_op_t;
+  // Inputs for integrity & confidentiality proofs
+  input tap_r_proof_op          : tap_proof_op_t;
+  input tap_e_proof_op          : tap_proof_op_t;
+  input tap_e_addr_valid        : addr_valid_t;
+  input tap_e_addr_map          : addr_map_t;
+  input tap_e_excl_vaddr        : excl_vaddr_t;
+  input tap_e_excl_map          : excl_map_t;
+  input tap_e_container_data    : container_data_t;
+  input tap_e_entrypoint        : vaddr_t;
 
   // State variables
-  output tap_current_mode : mode_t;
-  output tap_enclave_dead : boolean;
+  output tap_current_mode       : mode_t;
+  output tap_enclave_dead       : boolean;
+  output tap_op_status          : enclave_op_result_t;
+  output tap_enclave_abort      : boolean;
+  output tap_kms_tampered       : boolean;
+  output tap_storage_tampered   : boolean;
+  output tap_storage_rolledback : boolean;
 
   //
   // TAP uarch state
@@ -64,6 +75,9 @@ module tap {
   // var tap_enclave_metadata_root_snapshot    : tap_enclave_metadata_root_snapshot_t;
   // var tap_enclave_metadata_wap_addr_free    : tap_enclave_metadata_wap_addr_free_t;
 
+  var tap_enclave_metadata_key          : tap_enclave_metadata_key_t;
+  var tap_enclave_metadata_tag          : tap_enclave_metadata_tag_t;
+
   //
   // KMS metadata
   //
@@ -79,8 +93,8 @@ module tap {
   var tap_kms_tag                       : tap_kms_tag_t;
 
   // persistent storage for each enclave
-  var tap_storage_data                      : tap_storage_data_t;
-  var tap_storage_size                      : tap_storage_size_t;
+  var tap_storage_mem                       : tap_storage_mem_t;
+  var tap_storage_addr_valid                : tap_storage_addr_valid_t;
   var tap_storage_key                       : tap_storage_key_t;
   var tap_storage_tag                       : tap_storage_tag_t;
 
@@ -486,6 +500,13 @@ module tap {
                 (cpu_enclave_id != tap_null_enc_id) ==>
                     tap_addr_perm_eq(cpu_addr_valid[va], (tap_enclave_metadata_addr_valid[cpu_enclave_id])[va]));
 
+    // Memory is owned by living enclaves, blocked enclave, or the null enclave
+    ensures (forall (pa : wap_addr_t) ::
+                (cpu_owner_map[pa] == tap_blocked_enc_id ||
+                 cpu_owner_map[pa] == tap_null_enc_id ||
+                 (valid_enclave_id(cpu_owner_map[pa]) &&
+                    tap_enclave_metadata_valid[cpu_owner_map[pa]])));
+
     // After havoc, we're in untrusted mode
     ensures (current_mode == mode_untrusted);
     ensures (tap_current_mode == mode_untrusted);
@@ -604,8 +625,8 @@ module tap {
     // modifies tap_enclave_metadata_wap_addr_free;
     modifies tap_kms_key;
     modifies tap_kms_tag;
-    modifies tap_storage_data;
-    modifies tap_storage_size;
+    modifies tap_storage_mem;
+    modifies tap_storage_addr_valid;
     modifies tap_storage_key;
     modifies tap_storage_tag;
     modifies cpu_enclave_id;
@@ -618,6 +639,8 @@ module tap {
     modifies cache_valid_map;
     modifies cache_tag_map;
     modifies tap_current_mode;
+    modifies tap_enclave_metadata_key;
+    modifies tap_enclave_metadata_tag;
   {
     var status            : enclave_op_result_t;
     var r_eid, parent_eid : tap_enclave_id_t;
@@ -629,7 +652,6 @@ module tap {
     var r_container_data  : container_data_t;
     var r_entrypoint      : vaddr_t;
     var r_vaddr           : vaddr_t;
-    var r_size            : vaddr_t;
     var r_paddr           : wap_addr_t;
     var r_word            : word_t;
     var r_valid           : addr_perm_t;
@@ -638,8 +660,6 @@ module tap {
     var done              : boolean;
     var hit               : boolean;
     var op                : tap_op_t;
-    var key               : key_t;
-    var tag               : tag_t;
     var abort             : boolean;
 
     call initialize_tap();
@@ -776,6 +796,13 @@ module tap {
       invariant (forall (p : wap_addr_t) :: cpu_owner_map[p] != tap_invalid_enc_id);
       // invariant tap_enclave_metadata_root_snapshot[tap_null_enc_id] == tap_invalid_enc_id;
 
+      // Memory is owned by living enclaves, blocked enclave, or the null enclave
+      invariant (forall (pa : wap_addr_t) ::
+                  (cpu_owner_map[pa] == tap_blocked_enc_id ||
+                   cpu_owner_map[pa] == tap_null_enc_id ||
+                   (valid_enclave_id(cpu_owner_map[pa]) &&
+                      tap_enclave_metadata_valid[cpu_owner_map[pa]])));
+
       // Invalid indexed enclaves are never marked valid
       invariant (forall (e: tap_enclave_id_t) :: !valid_enclave_id(e) ==> !tap_enclave_metadata_valid[e]);
 
@@ -808,8 +835,6 @@ module tap {
       //             tap_enclave_metadata_root_snapshot[e] != p_e));
 
       // invariant tap_enclave_metadata_root_snapshot[tap_null_enc_id] == tap_invalid_enc_id;
-
-      invariant (forall (p : wap_addr_t) :: cpu_owner_map[p] != tap_invalid_enc_id);
 
       // An invalid enclave cannot be a root snapshot of any enclave
       // invariant (forall (e: tap_enclave_id_t, e_rs: tap_enclave_id_t) ::
@@ -879,15 +904,11 @@ module tap {
           //     call (status) = clone(r_eid, parent_eid, r_excl_map);
           // }
           (op == StoreStorage) : {
-            havoc r_vaddr;
-            havoc r_size;
-            call (status, abort) = store_storage(r_vaddr, r_size);
+            call (status, abort) = store_storage();
           }
           (op == LoadStorage) : {
-            havoc r_vaddr;
-            havoc r_size;
-            call (status, abort) = load_storage(r_vaddr, r_size);
-          }
+            call (status, abort) = load_storage();
+        }
           (op == TamperStorage) : {
             call (status) = tamper_storage(r_eid);
           }
@@ -898,7 +919,10 @@ module tap {
             call (status) = create_key(r_eid);
           }
           (op == GetKeyAndTag) : {
-            call (status, key, tag) = get_key_and_tag();
+            call (status, abort) = get_key_and_tag();
+          }
+          (op == UpdateTag) : {
+            call (status, abort) = update_tag();
           }
           (op == DeleteKey) : {
             call (status) = delete_key(r_eid);
@@ -962,25 +986,6 @@ module tap {
       untrusted_pc = _untrusted_pc;
   }
 
-  procedure InitStorageData(eid : tap_enclave_id_t, storage_data : storage_data_t, storage_size : vaddr_t)
-      modifies tap_storage_data;
-      modifies tap_storage_size;
-      modifies tap_storage_key;
-      modifies tap_storage_tag;
-  {
-      var d : [boolean]storage_data_t;
-      var s : [boolean]vaddr_t;
-      var k : [boolean]key_t;
-      var t : [boolean]tag_t;
-      d[fresh] = storage_data;
-      s[fresh] = storage_size;
-      k[fresh] = tap_kms_key[eid];
-      t[fresh] = tap_kms_tag[eid];
-      tap_storage_data[eid] = d;
-      tap_storage_size[eid] = s;
-      tap_storage_key[eid] = k;
-      tap_storage_tag[eid] = t;
-  }
 
   //--------------------------------------------------------------------------//
   // Utility functions for measurement theorem.                               //
@@ -1100,7 +1105,8 @@ module tap {
     op == tap_proof_op_load_storage   ||
     op == tap_proof_op_store_storage  ||
     // op == tap_proof_op_transfer_key_and_tag ||
-    op == tap_proof_op_get_key_and_tag;
+    op == tap_proof_op_get_key_and_tag ||
+    op == tap_proof_op_update_tag;
 
   procedure [inline] MeasurementUntrustedOp(
       /* operation */ op   : tap_proof_op_t,
@@ -1154,9 +1160,7 @@ module tap {
 
   procedure [inline] MeasurementEnclaveOp(
       /* operation */ op   : tap_proof_op_t,
-      /* iteration */ iter : integer,
-      /* location  */ tgt_vaddr : vaddr_t,
-      /* size      */ size : vaddr_t
+      /* iteration */ iter : integer
   )
     returns (status : enclave_op_result_t, current_mode : mode_t, vaddr : vaddr_t, word : word_t, abort : boolean)
     modifies untrusted_addr_valid;
@@ -1183,13 +1187,13 @@ module tap {
     // modifies tap_enclave_metadata_is_snapshot;
     modifies tap_kms_key;
     modifies tap_kms_tag;
-    modifies tap_storage_data;
+    modifies tap_storage_mem;
+    modifies tap_storage_addr_valid;
     modifies tap_storage_key;
     modifies tap_storage_tag;
-    modifies tap_storage_size;
+    modifies tap_enclave_metadata_key;
+    modifies tap_enclave_metadata_tag;
   {
-      var key               : key_t;
-      var tag               : tag_t;
       assert (is_measurement_enclave_op(op));
       vaddr = k0_vaddr_t;
       word  = k0_word_t;
@@ -1216,16 +1220,20 @@ module tap {
           call (status) = pause();
           current_mode = mode_untrusted;
         }
-        (op == tap_proof_op_load_storage) : {
-          call (status, abort) = load_storage(tgt_vaddr, size);
+        (op == tap_proof_op_store_storage) : {
+          call (status, abort) = store_storage();
           current_mode = mode_enclave;
         }
-        (op == tap_proof_op_store_storage) : {
-          call (status, abort) = store_storage(tgt_vaddr, size);
+        (op == tap_proof_op_load_storage) : {
+          call (status, abort) = load_storage();
+          current_mode = mode_enclave;
+        }
+        (op == tap_proof_op_update_tag) : {
+          call (status, abort) = update_tag();
           current_mode = mode_enclave;
         }
         (op == tap_proof_op_get_key_and_tag) : {
-          call (status, key, tag) = get_key_and_tag();
+          call (status, abort) = get_key_and_tag();
           current_mode = mode_enclave;
         }
       esac
@@ -1366,6 +1374,10 @@ module tap {
   = (o == tap_proof_op_compute)   ||
     (o == tap_proof_op_pause)     ||
     // (o == tap_proof_op_snapshot)  ||
+    (o == tap_proof_op_load_storage) ||
+    (o == tap_proof_op_store_storage) ||
+    // (o == tap_proof_op_get_key_and_tag) ||
+    // (o == tap_proof_op_update_tag) ||
     (o == tap_proof_op_exit);
 
   //
@@ -1670,11 +1682,19 @@ module tap {
     _tap_enclave_metadata_pc : tap_enclave_metadata_pc_t,
     _tap_enclave_metadata_regs : tap_enclave_metadata_regs_t,
     _tap_enclave_metadata_paused : tap_enclave_metadata_paused_t,
-    _tap_enclave_metadata_cache_conflict : tap_enclave_metadata_cache_conflict_t
+    _tap_enclave_metadata_cache_conflict : tap_enclave_metadata_cache_conflict_t,
     // _tap_enclave_metadata_is_snapshot: tap_enclave_metadata_is_snapshot_t,
     // _tap_enclave_metadata_child_count: tap_enclave_metadata_child_count_t,
     // _tap_enclave_metadata_root_snapshot: tap_enclave_metadata_root_snapshot_t,
     // _tap_enclave_metadata_wap_addr_free: tap_enclave_metadata_wap_addr_free_t
+    _tap_enclave_metadata_key: tap_enclave_metadata_key_t,
+    _tap_enclave_metadata_tag: tap_enclave_metadata_tag_t,
+    _tap_kms_key: tap_kms_key_t,
+    _tap_kms_tag: tap_kms_tag_t,
+    _tap_storage_key: tap_storage_key_t,
+    _tap_storage_tag: tap_storage_tag_t,
+    _tap_storage_mem: tap_storage_mem_t,
+    _tap_storage_addr_valid: tap_storage_addr_valid_t
   )
     modifies untrusted_addr_valid;
     modifies untrusted_addr_map;
@@ -1693,6 +1713,14 @@ module tap {
     // modifies tap_enclave_metadata_child_count;
     // modifies tap_enclave_metadata_root_snapshot;
     // modifies tap_enclave_metadata_wap_addr_free;
+    modifies tap_enclave_metadata_key;
+    modifies tap_enclave_metadata_tag;
+    modifies tap_kms_key;
+    modifies tap_kms_tag;
+    modifies tap_storage_key;
+    modifies tap_storage_tag;
+    modifies tap_storage_mem;
+    modifies tap_storage_addr_valid;
     modifies cpu_enclave_id;
     modifies cpu_addr_map;
     modifies cpu_addr_valid;
@@ -1719,6 +1747,14 @@ module tap {
     // tap_enclave_metadata_child_count    = _tap_enclave_metadata_child_count;
     // tap_enclave_metadata_root_snapshot  = _tap_enclave_metadata_root_snapshot;
     // tap_enclave_metadata_wap_addr_free  = _tap_enclave_metadata_wap_addr_free;
+    tap_enclave_metadata_key            = _tap_enclave_metadata_key;
+    tap_enclave_metadata_tag            = _tap_enclave_metadata_tag;
+    tap_kms_key                         = _tap_kms_key;
+    tap_kms_tag                         = _tap_kms_tag;
+    tap_storage_key                     = _tap_storage_key;
+    tap_storage_tag                     = _tap_storage_tag;
+    tap_storage_mem                     = _tap_storage_mem;
+    tap_storage_addr_valid              = _tap_storage_addr_valid;
 
     call set_cpu_state(_cpu_enclave_id,
                            _cpu_addr_map,
