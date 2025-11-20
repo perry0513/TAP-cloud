@@ -252,7 +252,7 @@ procedure [noinline] transfer_key_and_tag (src_eid : tap_enclave_id_t, dst_eid :
 // Get key and tag from KMS
 //
 procedure [noinline] get_key_and_tag ()
-  returns (status : enclave_op_result_t, key : key_t, tag : tag_t)
+  returns (status : enclave_op_result_t, abort : boolean)
 
   //----------------------------------------------------------------------//
   // The status can only be success or failure                            //
@@ -270,30 +270,135 @@ procedure [noinline] get_key_and_tag ()
   //----------------------------------------------------------------------//
   // Effects on success                                                   //
   //----------------------------------------------------------------------//
-  ensures (status == enclave_op_success ==> key == tap_kms_key[cpu_enclave_id]);
-  ensures (status == enclave_op_success ==> tag == tap_kms_tag[cpu_enclave_id]);
+  ensures (status == enclave_op_success) ==>
+            (tap_enclave_metadata_key[cpu_enclave_id] == tap_kms_key[cpu_enclave_id]);
+  ensures (status == enclave_op_success) ==>
+            (forall(e : tap_enclave_id_t) ::
+              (e != cpu_enclave_id) ==>
+                (tap_enclave_metadata_key[e] == old(tap_enclave_metadata_key)[e]));
+  ensures (status == enclave_op_success) ==>
+            (tap_enclave_metadata_tag[cpu_enclave_id] == tap_kms_tag[cpu_enclave_id]);
+  ensures (status == enclave_op_success) ==>
+            (forall(e : tap_enclave_id_t) ::
+              (e != cpu_enclave_id) ==>
+                (tap_enclave_metadata_tag[e] == old(tap_enclave_metadata_tag)[e]));
 
   //----------------------------------------------------------------------//
   // Effects on failure                                                   //
   //----------------------------------------------------------------------//
-  ensures (status == enclave_op_failed ==> key == null_key_t);
-  ensures (status == enclave_op_failed ==> tag == null_tag_t);
+  ensures (status == enclave_op_failed ==> tap_enclave_metadata_key == old(tap_enclave_metadata_key));
+  ensures (status == enclave_op_failed ==> tap_enclave_metadata_tag == old(tap_enclave_metadata_tag));
+
+  //----------------------------------------------------------------------//
+  // Abort conditions                                                    //
+  //----------------------------------------------------------------------//
+  ensures (valid_enclave_id(cpu_enclave_id)           &&
+           tap_enclave_metadata_valid[cpu_enclave_id] &&
+           !valid_key(tap_kms_key[cpu_enclave_id]))
+            <==> abort;
+
+  //----------------------------------------------------------------------//
+  // Modifies statements                                                  //
+  //----------------------------------------------------------------------//
+  modifies tap_enclave_metadata_key;
+  modifies tap_enclave_metadata_tag;
 {
   var eid : tap_enclave_id_t;
   eid = cpu_enclave_id;
 
-  key = null_key_t;
-  tag = null_tag_t;
+  status = enclave_op_success;
+  abort = false;
+
+  if (!valid_enclave_id(eid) ||
+      !tap_enclave_metadata_valid[eid]) {
+    status = enclave_op_failed;
+  }
+
+  if (status != enclave_op_failed) {
+    if (!valid_key(tap_kms_key[eid])) {
+      // If there is no valid key in KMS, we abort the enclave
+      abort = true;
+      status = enclave_op_failed;
+    }
+  }
+
+  if (status != enclave_op_failed) {
+    tap_enclave_metadata_key[eid] = tap_kms_key[eid];
+    tap_enclave_metadata_tag[eid] = tap_kms_tag[eid];
+  }
+}
+
+
+//
+// Update tag in KMS
+//
+procedure [noinline] update_tag ()
+  returns (status : enclave_op_result_t, abort : boolean)
+  //----------------------------------------------------------------------//
+  // The status can only be success or failure                            //
+  //----------------------------------------------------------------------//
+  ensures (status == enclave_op_success || status == enclave_op_failed);
+
+  //----------------------------------------------------------------------//
+  // Success/failure conditions                                           //
+  //----------------------------------------------------------------------//
+  ensures(valid_enclave_id(cpu_enclave_id)            &&
+           tap_enclave_metadata_valid[cpu_enclave_id] &&
+           valid_key(tap_enclave_metadata_key[cpu_enclave_id]) &&
+           tap_enclave_metadata_key[cpu_enclave_id] == tap_kms_key[cpu_enclave_id])
+            <==> (status == enclave_op_success);
+
+  //----------------------------------------------------------------------//
+  // Effects on success                                                   //
+  //----------------------------------------------------------------------//
+  ensures (status == enclave_op_success ==>
+            tap_kms_tag[cpu_enclave_id] == tap_enclave_metadata_tag[cpu_enclave_id]);
+  ensures (status == enclave_op_success) ==>
+            (forall(e : tap_enclave_id_t) ::
+              (e != cpu_enclave_id) ==>
+                (tap_kms_tag[e] == old(tap_kms_tag)[e]));
+
+  //----------------------------------------------------------------------//
+  // Effects on failure                                                   //
+  //----------------------------------------------------------------------//
+  ensures (status == enclave_op_failed ==> tap_kms_tag == old(tap_kms_tag));
+
+  //----------------------------------------------------------------------//
+  // Abort conditions                                                     //
+  //----------------------------------------------------------------------//
+  ensures (valid_enclave_id(cpu_enclave_id)           &&
+           tap_enclave_metadata_valid[cpu_enclave_id] &&
+           valid_key(tap_enclave_metadata_key[cpu_enclave_id]) &&
+           tap_enclave_metadata_key[cpu_enclave_id] != tap_kms_key[cpu_enclave_id])
+            <==> abort;
+
+  //----------------------------------------------------------------------//
+  // Modifies statements                                                  //
+  //----------------------------------------------------------------------//
+  modifies tap_kms_tag;
+{
+  var eid : tap_enclave_id_t;
+  eid = cpu_enclave_id;
 
   status = enclave_op_success;
+  abort = false;
 
-  if (!valid_enclave_id(eid)           ||
+  if (!valid_enclave_id(eid) ||
       !tap_enclave_metadata_valid[eid] ||
-      !valid_key(tap_kms_key[eid])) {
+      !valid_key(tap_enclave_metadata_key[eid])) {
     status = enclave_op_failed;
-  } else {
-    key = tap_kms_key[eid];
-    tag = tap_kms_tag[eid];
+  }
+
+  if (status != enclave_op_failed) {
+    if (tap_enclave_metadata_key[eid] != tap_kms_key[eid]) {
+      // If the enclave's key does not match the KMS key, we abort the enclave
+      abort = true;
+      status = enclave_op_failed;
+    }
+  }
+
+  if (status != enclave_op_failed) {
+    tap_kms_tag[eid] = tap_enclave_metadata_tag[eid];
   }
 }
 }
