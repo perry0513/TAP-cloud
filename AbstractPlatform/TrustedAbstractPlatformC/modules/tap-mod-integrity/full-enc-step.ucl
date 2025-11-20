@@ -3,10 +3,10 @@ module tap {
   // Enclave operation                                                    //
   //======================================================================//
   procedure [inline] IntegrityEnclaveStep(
-      /* what operation?  */  op : tap_proof_op_t, 
+      /* what operation?  */  op : tap_proof_op_t,
       /* which iteration? */  iter : integer
   )
-    returns (next_mode : mode_t, vaddr : vaddr_t, paddr : wap_addr_t, data : word_t)
+    returns (next_mode : mode_t, vaddr : vaddr_t, paddr : wap_addr_t, data : word_t, status : enclave_op_result_t, abort : boolean)
     ensures (op == tap_proof_op_compute ==> next_mode == mode_enclave);
     ensures (op != tap_proof_op_compute ==> next_mode == mode_untrusted);
     modifies tap_enclave_metadata_valid;
@@ -25,13 +25,21 @@ module tap {
     modifies cpu_addr_map;
     modifies cpu_regs;
     modifies cache_valid_map, cache_tag_map;
+    modifies tap_enclave_metadata_key;
+    modifies tap_enclave_metadata_tag;
+    modifies tap_storage_mem;
+    modifies tap_storage_addr_valid;
+    modifies tap_storage_key;
+    modifies tap_storage_tag;
+    modifies tap_kms_tag;
+    modifies tap_op_status;
   {
-    var status : enclave_op_result_t;
     assert tap_proof_op_valid_in_enclave(op);
 
     vaddr = k0_vaddr_t;
     paddr = k0_wap_addr_t;
     data = k0_word_t;
+    abort = false;
 
     // in enclave-mode:
     case
@@ -57,6 +65,24 @@ module tap {
           call (vaddr, paddr, data) = EnclaveComputation(iter);
           next_mode = mode_enclave;
         }
+        (op == tap_proof_op_load_storage) : {
+          call (status, abort) = load_storage();
+          next_mode = mode_enclave;
+        }
+        (op == tap_proof_op_store_storage) : {
+          call (status, abort) = store_storage();
+          next_mode = mode_enclave;
+        }
+        (op == tap_proof_op_get_key_and_tag) : {
+          call (status, abort) = get_key_and_tag();
+          next_mode = mode_enclave;
+        }
+        (op == tap_proof_op_update_tag) : {
+          call (status, abort) = update_tag();
+          next_mode = mode_enclave;
+        }
     esac
+
+    tap_op_status = status;
   }
 }
