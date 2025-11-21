@@ -174,8 +174,6 @@ procedure [inline] load_storage_only ()
   modifies cache_valid_map;
   modifies cache_tag_map;
   modifies tap_enclave_metadata_addr_valid;
-  modifies tap_enclave_metadata_key;
-  modifies tap_enclave_metadata_tag;
 {
   var r0, r1  : word_t;
   var eid     : tap_enclave_id_t;
@@ -191,7 +189,7 @@ procedure [inline] load_storage_only ()
   abort = false;
   eid = cpu_enclave_id;
 
-  // Check if in enclave mode
+  // Check if enclave is valid and alive
   if (!valid_enclave_id(eid) ||
       !tap_enclave_metadata_valid[eid]) {
     status = enclave_op_failed;
@@ -203,8 +201,7 @@ procedure [inline] load_storage_only ()
               tap_enclave_metadata_valid[eid]);
     havoc way;
     assume valid_cache_way_index(way);
-    // call (pc_op, excp, hit) = fetch_va(cpu_pc, way);
-    pc_op = cpu_mem[cpu_addr_map[cpu_pc]];
+    call (pc_op, excp, hit) = fetch_va(cpu_pc, way);
 
     // two register sources.
     r0 = cpu_regs[uf_cpu_r0_index(pc_op)];
@@ -263,79 +260,20 @@ procedure [inline] load_storage ()
   modifies tap_enclave_metadata_key;
   modifies tap_enclave_metadata_tag;
 {
-  // var r0, r1  : word_t;
   var eid     : tap_enclave_id_t;
-  // var pc_pa   : wap_addr_t;
-  // var pc_op   : word_t;
-  // var excp    : exception_t;
-  // var hit     : boolean;
-  // var way     : cache_way_index_t;
-  // var map : vaddr2vaddr_t;
-  // var load : vaddr2bool_t;
 
   status = enclave_op_success;
   abort = false;
   eid = cpu_enclave_id;
 
+  // Get key and tag
   call (status, abort) = get_key_and_tag();
 
+  // Load data
   if (status != enclave_op_failed) {
     assert (valid_enclave_id(eid) && tap_enclave_metadata_valid[eid]);
     call (status, abort) = load_storage_only();
   }
-
-  // // Check if in enclave mode
-  // if (status != enclave_op_failed) {
-  //   assert (valid_enclave_id(eid) && tap_enclave_metadata_valid[eid]);
-  //   pc_pa = cpu_addr_map[cpu_pc];
-  //   // assert (tap_enclave_metadata_addr_excl[eid])[cpu_pc];
-  //   assert cpu_owner_map[pc_pa] == eid ||
-  //           (valid_enclave_id(eid) &&
-  //             tap_enclave_metadata_valid[eid]);
-  //   havoc way;
-  //   assume valid_cache_way_index(way);
-  //   call (pc_op, excp, hit) = fetch_va(cpu_pc, way);
-
-  //   // two register sources.
-  //   r0 = cpu_regs[uf_cpu_r0_index(pc_op)];
-  //   r1 = cpu_regs[uf_cpu_r1_index(pc_op)];
-
-  //   map = uf_vaddr_map(r0, r1);
-  //   load = uf_load_vaddr(r0, r1);
-
-  //   assume (valid_enclave_id(eid) &&
-  //             tap_enclave_metadata_valid[eid]) ==>
-  //           (forall (v : vaddr_t) ::
-  //             (load[v]) ==>
-  //               (tap_enclave_metadata_addr_excl[eid][v]  &&
-  //                 tap_addr_perm_w(cpu_addr_valid[v])     &&
-  //                 cpu_owner_map[cpu_addr_map[v]] == eid));
-
-  //   assume (valid_enclave_id(eid) &&
-  //             tap_enclave_metadata_valid[eid]) ==>
-  //           (forall (v1, v2 : vaddr_t) ::
-  //             (map[v1] == v2) ==>
-  //               (tap_enclave_metadata_addr_excl[eid][v1] == tap_enclave_metadata_addr_excl[eid][v2]));
-
-  //   assume (valid_enclave_id(cpu_enclave_id) &&
-  //             tap_enclave_metadata_valid[cpu_enclave_id]) ==>
-  //           (forall (v1, v2 : vaddr_t) ::
-  //             (v1 != v2 && (load[v1] || load[v2])) ==>
-  //               (cpu_addr_map[v1] != cpu_addr_map[v2]));
-
-  //   call (status, abort) = _load_storage(map, load);
-
-  //   // Update PC if not aborted
-  //   if (!abort) {
-  //     call set_cpu_pc(PLUS_va(cpu_pc, k1_vaddr_t));
-  //     assume tap_addr_perm_x(cpu_addr_valid[cpu_pc]);
-  //     assume tap_enclave_metadata_addr_excl[eid][cpu_pc];
-
-  //     // Sanity check. REMOVED: attacker-controlled enclave does not guarantee this
-  //     // assert cpu_owner_map[cpu_addr_map[cpu_pc]] == eid;
-  //   }
-
-  // }
 
   assert (abort ==> status != enclave_op_success);
   assert (valid_enclave_id(eid) &&
