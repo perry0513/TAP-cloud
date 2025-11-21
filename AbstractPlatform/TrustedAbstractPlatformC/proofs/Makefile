@@ -112,6 +112,8 @@ CACHE_CONF_PROOF_obs_pause=./../modules/tap-mod-conf/obs-pause.ucl ./../modules/
 CACHE_CONF_PROOF_obs_release=./../modules/tap-mod-conf/obs-release.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(CACHE_CONF_PROOF)
 CACHE_CONF_PROOF_obs_resume=./../modules/tap-mod-conf/obs-resume.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(CACHE_CONF_PROOF)
 
+.ONESHELL:
+
 # Measurement proof
 measurement-proof-printed:
 	rm -rf verify_log
@@ -306,7 +308,6 @@ mem-conf-printed:
 	uclid -g mem-conf/smt --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_complete)
 
 # Verifying
-.ONESHELL:
 mem-conf-case-split:
 	rm -rf verify_log
 
