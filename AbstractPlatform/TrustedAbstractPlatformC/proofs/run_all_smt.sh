@@ -1,5 +1,5 @@
 #!/bin/bash
-python3 ../scripts/run_smt_parallel.py $1
+python3 ../scripts/run_smt_parallel.py $1 $2
 
 
 #for file in "$1"/*
