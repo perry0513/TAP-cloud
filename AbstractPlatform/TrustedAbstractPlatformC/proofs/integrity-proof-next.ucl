@@ -1,38 +1,109 @@
 module integrity_proof {
+  // Assume that the attacker has access to only user side operations.
+  axiom tap_proof_op_valid(r_proof_op);
+
+  // Assume that the enclave has access to only enclave operations.
+  axiom tap_proof_op_valid_in_enclave(e_proof_op);
+
   //=============================================================================//
   // Transition relation                                                         //
   //=============================================================================//
   next {
-    // Assume that the trusted enclave is not destroyed
-    // This covers the termination case because it can die after the transition step
-    assume (!enclave_dead && !cpu_1.tap_enclave_dead && !cpu_2.tap_enclave_dead);
+    // Always verify the next block
     assume (verif);
+    // Assume all variables are the same as the first trace
+    assume (enclave_dead == enclave_dead_1);
+    assume (enclave_abort == enclave_abort_1);
+    assume (current_mode == current_mode_1);
+    assume (kms_tampered == kms_tampered_1);
+    assume (storage_tampered == storage_tampered_1);
+    assume (storage_rolledback == storage_rolledback_1);
+    // The stale storage tag is never equal to the kms tag because tags should never repeat
+    assume (cpu_1.tap_storage_tag[eid][stale] != cpu_1.tap_kms_tag[eid]);
 
-    // // Havoc the adversary arugments and operation
-    // havoc r_eid; havoc r_proof_op; havoc r_regs;
-    // // Havoc the enclave operation
-    // havoc e_proof_op;
-    // // Havoc iter
-    // havoc iter;
 
-    // Assume that the attacker has access to only user side operations.
-    assume tap_proof_op_valid(r_proof_op);
+    // Only rollback storage when storage is not yet tampered
+    assume (r_proof_op == tap_proof_op_rollback_storage ==> !storage_rolledback);
 
-    // Assume that the enclave has access to only enclave operations.
-    assume tap_proof_op_valid_in_enclave(e_proof_op);
+    // Under what condition can we execute each enclave operation?
+    assume (e_proof_op == tap_proof_op_load_storage ==> !loaded);
+    assume (e_proof_op == tap_proof_op_store_storage ==> !stored);
+
+    // When enclave is in the abort state, it can only perform exit and no other operations.
+    assume (enclave_abort ==> (e_proof_op == tap_proof_op_exit || e_proof_op == tap_proof_op_pause));
 
     // Step tap trace 1
     next(cpu_1);
 
-    // Step tap trace 2
-    // NOTE: If the mode is untrusted, then we only step if trace 1 executes the enclave `eid`.
-    //       i.e. When trace 1 doesn't switch from untrusted context, stutter
-    if (current_mode == mode_untrusted ==> current_mode' == mode_enclave) {
+    // Step tap trace 2 if one of the following conditions hold:
+    // 1) The current mode changes (i.e., switch between trusted and untrusted)
+    // 2) The current mode is trusted/enclave, and the enclave does not enter an abort state
+    // 3) The enclave `eid` is launched or destroyed
+    // Otherwise, stutter.
+    if ((current_mode != current_mode') ||
+        (current_mode == mode_enclave && !enclave_abort') ||
+        (enclave_dead != enclave_dead')) {
         next(cpu_2);
     }
 
     // Set the shared mode and enclave `eid` state
     current_mode' = current_mode_1';
     enclave_dead' = enclave_dead_1';
+
+    enclave_abort' = enclave_abort_1';
+    kms_tampered' = kms_tampered_1';
+    storage_tampered' = storage_tampered_1';
+    storage_rolledback' = storage_rolledback_1';
+    status' = status_1';
+
+    // Flag update
+    case
+    // In enclave mode and the operation succeeded
+    (current_mode == mode_enclave && status' == enclave_op_success) : {
+      case
+        (e_proof_op == tap_proof_op_store_storage) : {
+          already_stored' = true;
+          kms_storage_key_sync' = true;
+          kms_storage_tag_sync' = true;
+          loaded' = false;
+          stored' = true;
+        }
+        (e_proof_op == tap_proof_op_load_storage) : {
+          loaded' = true;
+          stored' = false;
+        }
+      esac
+    }
+    // In untrusted mode and the operation on the client enclave succeeded
+    (current_mode == mode_untrusted && r_eid == eid && status' == enclave_op_success) : {
+      case
+        (r_proof_op == tap_proof_op_launch) : {
+          assert (enclave_dead && !enclave_dead');
+          loaded' = false;
+          stored' = false;
+        }
+        (r_proof_op == tap_proof_op_destroy) : {
+          assert (!enclave_dead && enclave_dead');
+          loaded' = false;
+          stored' = false;
+        }
+        (r_proof_op == tap_proof_op_create_key) : {
+          kms_storage_key_sync' = false;
+          kms_key_deleted' = false;
+        }
+        (r_proof_op == tap_proof_op_delete_key) : {
+          kms_storage_key_sync' = false;
+          kms_key_deleted' = true;
+        }
+        (r_proof_op == tap_proof_op_tamper_storage) : {
+          kms_storage_key_sync' = false;
+          kms_storage_tag_sync' = false;
+        }
+        (r_proof_op == tap_proof_op_rollback_storage) : {
+          kms_storage_tag_sync' = false;
+        }
+      esac
+    }
+    esac
   }
 }

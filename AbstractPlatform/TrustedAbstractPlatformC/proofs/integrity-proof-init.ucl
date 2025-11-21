@@ -11,12 +11,12 @@ module integrity_proof {
     // Initialization                                                              //
     //=============================================================================//
     init {
-        var status:    enclave_op_result_t;
-        var create_op: create_enclave_op_t;
+        var status                        : enclave_op_result_t;
+        var create_op                     : create_enclave_op_t;
 
         // Enclave is assumed to be successfully created and hence not dead initially
         assume (!enclave_dead && !cpu_1.tap_enclave_dead && !cpu_2.tap_enclave_dead);
-        
+
         // Initialize TAP models in both traces
         call (current_mode_1) = cpu_1.InitialHavoc();
         call (current_mode_2) = cpu_2.InitialHavoc();
@@ -34,10 +34,30 @@ module integrity_proof {
             // Launch `eid` in trace 1
             call (status) = cpu_1.launch(eid, e_addr_valid, e_addr_map, e_excl_vaddr, e_excl_map, e_entrypoint);
             assume status == enclave_op_success;
-            
+            // Client create key before execution
+            call (status) = cpu_1.create_key(eid);
+            assume (status == enclave_op_success);
+            // Initally tag in kms is null
+            assume (!valid_tag(cpu_1.tap_kms_tag[eid]));
+            // Initially storage is empty (both fresh and stale keys are invalid)
+            assume (!valid_key(cpu_1.tap_storage_key[eid][fresh]) &&
+                    !valid_tag(cpu_1.tap_storage_tag[eid][fresh]) &&
+                    !valid_key(cpu_1.tap_storage_key[eid][stale]) &&
+                    !valid_tag(cpu_1.tap_storage_tag[eid][stale]));
+
             // Launch `eid` in trace 2
             call (status) = cpu_2.launch(eid, e_addr_valid, e_addr_map, e_excl_vaddr, e_excl_map, e_entrypoint);
             assume status == enclave_op_success;
+            // Client create key before execution
+            call (status) = cpu_2.create_key(eid);
+            assume (status == enclave_op_success);
+            // Initally tag in kms is null
+            assume (!valid_tag(cpu_2.tap_kms_tag[eid]));
+            // Initially storage is empty (both fresh and stale keys are invalid)
+            assume (!valid_key(cpu_2.tap_storage_key[eid][fresh]) &&
+                    !valid_tag(cpu_2.tap_storage_tag[eid][fresh]) &&
+                    !valid_key(cpu_2.tap_storage_key[eid][stale]) &&
+                    !valid_tag(cpu_2.tap_storage_tag[eid][stale]));
           }
           // (create_op == create_by_clone) : {
           //   var parent_root_snapshot: tap_enclave_id_t;
@@ -53,7 +73,7 @@ module integrity_proof {
           //   // Sanity check: the parent root snapshot should be a snapshot
           //   assert (valid_enclave_id(parent_root_snapshot) ==>
           //             cpu_1.tap_enclave_metadata_is_snapshot[parent_root_snapshot]);
-      
+
           //   // Assume the parent or root snapshot's memory ownership to be the same
           //   assume (forall (p: wap_addr_t) :: (e_root_excl_map[p] <==>
           //             ((cpu_1.cpu_owner_map[p] == parent_root_snapshot || cpu_1.cpu_owner_map[p] == r_parent_eid) &&
@@ -68,19 +88,19 @@ module integrity_proof {
 
           //   // If the parent has a root snapshot, it's also identical
           //   assume (tap_metadata_equal(parent_root_snapshot));
-            
+
           //   // The enclave in the parent traces owns PA defined by e_root_excl_map
-          //   assume (forall (pa: wap_addr_t) :: 
+          //   assume (forall (pa: wap_addr_t) ::
           //                 ((cpu_1.cpu_owner_map[pa] == cpu_1.tap_enclave_metadata_root_snapshot[eid]) <==>
           //                   e_root_excl_map[pa]));
-          //   assume (forall (pa: wap_addr_t) :: 
+          //   assume (forall (pa: wap_addr_t) ::
           //                 ((cpu_2.cpu_owner_map[pa] == cpu_2.tap_enclave_metadata_root_snapshot[eid]) <==>
           //                   e_root_excl_map[pa]));
 
           //   // Clone `eid` in trace 1
           //   call (status) = cpu_1.clone(eid, r_parent_eid, e_excl_map);
           //   assume status == enclave_op_success;
-      
+
           //   // Clone `eid` in trace 2
           //   call (status) = cpu_2.clone(eid, r_parent_eid, e_excl_map);
           //   assume status == enclave_op_success;
@@ -91,31 +111,22 @@ module integrity_proof {
         // assert current_mode_1 == mode_untrusted;
         // assert current_mode_2 == mode_untrusted;
 
-        // Set global mode
-        current_mode = current_mode_1;
-
-        // Havoc the attacker inputs
-        havoc r_eid; havoc r_proof_op; havoc e_proof_op; havoc r_regs;
-        assume tap_proof_op_valid(r_proof_op);
-
-        // Execute the attacker operation in trace 1
-        call (current_mode_1, enclave_dead_1) = cpu_1.IntegrityAdversarialStep(
-                current_mode, eid, r_eid, r_parent_eid, r_regs, r_proof_op);
-        current_mode = current_mode_1;
-
-        // If the mode changed, we need to do this in trace_2
-        if (current_mode == mode_enclave) {
-            call (current_mode_2, enclave_dead_2) = cpu_2.IntegrityAdversarialStep(
-                    current_mode, eid, r_eid, r_parent_eid, r_regs, r_proof_op);
-            // sanity check.
-            // assert current_mode == mode_enclave;
-            // assert !enclave_dead;
-            // assert(false);
-        }
-        // assert(false);
-
         // Set the shared mode and enclave `eid` state
         current_mode = current_mode_1;
         enclave_dead = enclave_dead_1;
+
+        // Initially no key or tag retrieved, no storage done, no kms tag updated
+        // assume (!already_stored && !key_retrieved && !tag_retrieved && !kms_tag_updated);
+
+        // Initially no tampering or abort
+        assume (!enclave_abort && !cpu_1.tap_enclave_abort && !cpu_2.tap_enclave_abort);
+        assume (!kms_tampered && !cpu_1.tap_kms_tampered && !cpu_2.tap_kms_tampered);
+        assume (!storage_tampered && !cpu_1.tap_storage_tampered && !cpu_2.tap_storage_tampered);
+        assume (!storage_rolledback && !cpu_1.tap_storage_rolledback && !cpu_2.tap_storage_rolledback);
+
+        assume (!loaded && !stored);
+        assume (!already_stored && !kms_storage_key_sync && !kms_storage_tag_sync && !kms_key_deleted);
+
+        assume (status == status_1 && status == status_2);
     }
 }
