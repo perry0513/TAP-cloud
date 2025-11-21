@@ -16,6 +16,8 @@ SOLVER_CONFIG = {
         "options": [
             "",
             "--enum-inst",
+            # "--cbqi-all-conflict",
+            # "--mbqi",
             # "--decision internal --enum-inst --enum-inst-sum",
             # "--simplification none --enum-inst",
             # "--no-e-matching --enum-inst",
@@ -30,12 +32,12 @@ SOLVER_CONFIG = {
     "z3": {
         "exe": "z3",
         "options": [
-            "",
+            # "",
         ],
     }
 }
 
-MAX_WORKERS = 4
+MAX_WORKERS = 8
 OUTPUT_CSV = "results.csv"
 PROGRESS_UPDATE_INTERVAL = 0.5
 TIMEOUT = 10  # seconds
@@ -175,8 +177,10 @@ def main(directory):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python run_smt_parallel.py <directory>")
+    if len(sys.argv) < 2:
+        print("Usage: python run_smt_parallel.py <DIRECTORY> [TIMEOUT_PER_SOLVER]")
         sys.exit(1)
+    if len(sys.argv) == 3:
+        TIMEOUT = int(sys.argv[2])
     main(sys.argv[1])
 
