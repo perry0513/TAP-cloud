@@ -846,9 +846,14 @@ module measurement_proof {
       havoc proof_op;
       havoc regs;
 
+      // Can be verified through below case split
+      // 1.
       // assume (is_measurement_untrusted_op(proof_op));
-      // assume (is_measurement_enclave_op(proof_op));
-      // assume (proof_op != tap_proof_op_compute);
+      // 2.
+      // assume (is_measurement_enclave_op(proof_op) && proof_op == tap_proof_op_compute);
+      // 3.
+      // assume (is_measurement_enclave_op(proof_op) && proof_op != tap_proof_op_compute);
+
 
       if (current_mode == mode_untrusted) {
         assume (is_measurement_untrusted_op(proof_op));
