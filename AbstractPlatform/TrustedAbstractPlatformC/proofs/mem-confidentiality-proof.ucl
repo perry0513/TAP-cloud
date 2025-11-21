@@ -139,7 +139,7 @@ procedure ProveConfidentialityMem(
 
         // trace_1
         call (observation_1, current_mode_1, enclave_dead_1, status_1, excp_1_1, excp_1_2, hit_1_1, hit_1_2) =
-                                cpu_1.ObserverStep(k_mem_observer_t, current_mode, eid, r_eid, r_proof_op, 
+                                cpu_1.ObserverStep(k_mem_observer_t, current_mode, eid, r_eid, r_parent_eid, r_proof_op,
                                             r_pc, r_read, r_write, r_data, 
                                             l_vaddr, s_vaddr, s_data,
                                             r_pt_eid, r_pt_va,
@@ -151,8 +151,8 @@ procedure ProveConfidentialityMem(
 
         // trace_2
         call (observation_2, current_mode_2, enclave_dead_2, status_2, excp_2_1, excp_2_2, hit_2_1, hit_2_2) =
-                                cpu_2.ObserverStep(k_mem_observer_t, current_mode, eid, r_eid, r_proof_op, 
-                                            r_pc, r_read, r_write, r_data, 
+                                cpu_2.ObserverStep(k_mem_observer_t, current_mode, eid, r_eid, r_parent_eid, r_proof_op,
+                                            r_pc, r_read, r_write, r_data,
                                             l_vaddr, s_vaddr, s_data,
                                             r_pt_eid, r_pt_va,
                                             pt_eid, pt_vaddr, pt_valid, pt_paddr,

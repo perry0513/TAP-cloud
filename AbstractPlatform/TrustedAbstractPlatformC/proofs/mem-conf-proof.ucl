@@ -2,12 +2,12 @@ module mem_confidentiality_proof {
     //----------------------------------------------------------------------//
     // Import statements                                                    //
     //----------------------------------------------------------------------//
-    
+
     type * = proof_common.*;
     const * = proof_common.*;
     function * = proof_common.*;
     define * = proof_common.*;
-    
+
     //----------------------------------------------------------------------//
     // Proof state variables                                                //
     //----------------------------------------------------------------------//
@@ -96,6 +96,13 @@ module mem_confidentiality_proof {
                         tap_pt_vaddr: (pt_vaddr),
                         tap_pt_valid: (pt_valid),
                         tap_pt_paddr: (pt_paddr),
+                        tap_op_status: (status_1),
+                        tap_e_addr_valid: (e_addr_valid_1),
+                        tap_e_addr_map: (e_addr_map_1),
+                        tap_e_excl_vaddr: (e_excl_vaddr_1),
+                        tap_e_excl_map: (e_excl_map),
+                        tap_e_container_data: (e_container_data_1),
+                        tap_e_entrypoint: (e_entrypoint_1),
                         tap_r_addr_valid: (r_addr_valid),
                         tap_r_addr_map: (r_addr_map),
                         tap_r_excl_vaddr: (r_excl_vaddr),
@@ -135,6 +142,13 @@ module mem_confidentiality_proof {
                         tap_pt_vaddr: (pt_vaddr),
                         tap_pt_valid: (pt_valid),
                         tap_pt_paddr: (pt_paddr),
+                        tap_op_status: (status_2),
+                        tap_e_addr_valid: (e_addr_valid_2),
+                        tap_e_addr_map: (e_addr_map_2),
+                        tap_e_excl_vaddr: (e_excl_vaddr_2),
+                        tap_e_excl_map: (e_excl_map),
+                        tap_e_container_data: (e_container_data_2),
+                        tap_e_entrypoint: (e_entrypoint_2),
                         tap_r_addr_valid: (r_addr_valid),
                         tap_r_addr_map: (r_addr_map),
                         tap_r_excl_vaddr: (r_excl_vaddr),
@@ -184,36 +198,36 @@ module mem_confidentiality_proof {
     // [Global] The main property; we want to show that the observations are equal
     invariant inv1: verif ==>
       (observation_1 == observation_2);
-    
+
     // [Global] The enclave is either running in untrusted mode (ie. adversary) or
     // trusted mode (ie. the protected enclave `eid` is running)
     invariant inv2: verif ==>
       (current_mode == mode_untrusted || current_mode == mode_enclave);
-    
+
     // [Trace 1] Memory is not assigned to an enclave that doesn't exist (wasn't launched and hence not valid)
     invariant inv3: verif ==>
       (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
-        (valid_enclave_id(e) && !cpu_1.tap_enclave_metadata_valid[e]) ==> 
+        (valid_enclave_id(e) && !cpu_1.tap_enclave_metadata_valid[e]) ==>
           (cpu_1.cpu_owner_map[pa] != e));
 
     // [Trace 2] Memory is not assigned to an enclave that doesn't exist (wasn't launched and hence not valid)
     invariant inv4: verif ==>
       (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
-        (valid_enclave_id(e) && !cpu_2.tap_enclave_metadata_valid[e]) ==> 
+        (valid_enclave_id(e) && !cpu_2.tap_enclave_metadata_valid[e]) ==>
           (cpu_2.cpu_owner_map[pa] != e));
-    
+
     //-------------------------------------------------------------------//
     // CPU mode and CPU enclave ID must be consistent                    //
     //-------------------------------------------------------------------//
-    
+
     // [Trace 1] If an enclave ID is invalid, then it cannot be launched and made a valid enclave
     invariant inv5: verif ==>
-      (forall (e : tap_enclave_id_t) :: 
+      (forall (e : tap_enclave_id_t) ::
                 !valid_enclave_id(e) ==> !cpu_1.tap_enclave_metadata_valid[e]);
 
     // [Trace 2] If an enclave ID is invalid, then it cannot be launched and made a valid enclave
     invariant inv6: verif ==>
-      (forall (e : tap_enclave_id_t) :: 
+      (forall (e : tap_enclave_id_t) ::
                 !valid_enclave_id(e) ==> !cpu_2.tap_enclave_metadata_valid[e]);
 
     // [Trace 1] When running in untrusted mode, the CPU is not running the protected enclave `eid`
@@ -227,25 +241,25 @@ module mem_confidentiality_proof {
         (cpu_2.cpu_enclave_id != eid);
 
     // [Trace 1] When running in enclave mode, the CPU is running `eid` (definition of enclave mode)
-    invariant inv9: (verif && !enclave_dead) ==>
+    invariant inv9: (verif) ==>
       (current_mode == mode_enclave) ==>
         (cpu_1.cpu_enclave_id == eid);
 
     // [Trace 2] When running in enclave mode, the CPU is running `eid`
-    invariant inv10: (verif && !enclave_dead) ==>
+    invariant inv10: (verif) ==>
       (current_mode == mode_enclave) ==>
         (cpu_2.cpu_enclave_id == eid);
 
     // [Trace 1] The CPU enclave ID must always be a valid one or not an enclave
     invariant cpu_enclave_id_1:
-      (verif && !enclave_dead) ==>
+      (verif) ==>
           (valid_enclave_id(cpu_1.cpu_enclave_id) || cpu_1.cpu_enclave_id == tap_null_enc_id);
 
     // [Trace 2] The CPU enclave ID must always be a valid one or not an enclave
     invariant cpu_enclave_id_2:
-      (verif && !enclave_dead) ==>
+      (verif) ==>
           (valid_enclave_id(cpu_2.cpu_enclave_id) || cpu_2.cpu_enclave_id == tap_null_enc_id);
-    
+
     //-------------------------------------------------------------------//
     // Enclave 'eid' is mostly alive                                     //
     //-------------------------------------------------------------------//
@@ -265,11 +279,11 @@ module mem_confidentiality_proof {
     // [Trace 1] `eid` is marked valid if it's not dead
     invariant inv14: verif ==>
       (!enclave_dead ==> cpu_1.tap_enclave_metadata_valid[eid]);
-    
+
     // [Trace 2] `eid` is marked valid if it's not dead
     invariant inv15: verif ==>
       (!enclave_dead ==> cpu_2.tap_enclave_metadata_valid[eid]);
-    
+
     // [Trace 1] `eid`'s exclusive address map is the same as the initial one
     invariant inv16: verif ==>
       (!enclave_dead) ==>
@@ -279,7 +293,7 @@ module mem_confidentiality_proof {
     invariant inv17: verif ==>
       (!enclave_dead) ==>
         (cpu_2.tap_enclave_metadata_addr_excl[eid] == e_excl_vaddr_2);
-    
+
     // [Trace 1] `eid`'s address mapping is the same as the initial one
     invariant inv18: verif ==>
       (forall (v : vaddr_t) ::
@@ -291,71 +305,71 @@ module mem_confidentiality_proof {
       (forall (v : vaddr_t) ::
                   (!enclave_dead && e_excl_vaddr_2[v]) ==>
                       (cpu_2.tap_enclave_metadata_addr_map[eid][v] == e_addr_map_2[v]));
-    
+
     // [Trace 1] The cpu_owner_map and enclave `eid`'s excl_map are consistent
     invariant inv20: (verif && !enclave_dead) ==>
-      (forall (p : wap_addr_t) :: 
+      (forall (p : wap_addr_t) ::
         ((cpu_1.cpu_owner_map[p] == eid) <==> e_excl_map[p]));
-    
+
     // [Trace 2] The cpu_owner_map and enclave `eid`'s excl_map are consistent
     invariant inv21: (verif && !enclave_dead) ==>
-      (forall (p : wap_addr_t) :: 
+      (forall (p : wap_addr_t) ::
         ((cpu_2.cpu_owner_map[p] == eid) <==> e_excl_map[p]));
-    
+
     // [Trace 1] The cpu_owner_map and enclave `eid`'s root snapshot excl_map are consistent
     // invariant inv20_root: (verif && !enclave_dead && valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid])) ==>
-    //                     (forall (pa: wap_addr_t) :: 
+    //                     (forall (pa: wap_addr_t) ::
     //                       ((cpu_1.cpu_owner_map[pa] == cpu_1.tap_enclave_metadata_root_snapshot[eid]) <==> e_root_excl_map[pa]));
-    
+
     // [Trace 2] The cpu_owner_map and enclave `eid`'s root snapshot excl_map are consistent
     // invariant inv21_root: (verif && !enclave_dead && valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[eid])) ==>
-    //                     (forall (pa: wap_addr_t) :: 
+    //                     (forall (pa: wap_addr_t) ::
     //                       ((cpu_2.cpu_owner_map[pa] == cpu_2.tap_enclave_metadata_root_snapshot[eid]) <==> e_root_excl_map[pa]));
 
     // [Trace 1] `eid`'s mapped PA are the same as e_excl_map
-    // 
+    //
     // NOTE: Together with the invariant below, this says that the mapped physical addresses
     //       are the same for the protected enclave `eid` between the two traces and it
     //       stays constant throughout the execution of the enclave
     invariant inv22: verif ==>
-      (forall (v : vaddr_t, p : wap_addr_t) :: 
+      (forall (v : vaddr_t, p : wap_addr_t) ::
                     (!enclave_dead && e_excl_vaddr_1[v] && p == e_addr_map_1[v])
                         ==> e_excl_map[p]);
-    
+
     // [Trace 2] `eid`'s mapped PA are the same as e_excl_map
     invariant inv23: verif ==>
-      (forall (v : vaddr_t, p : wap_addr_t) :: 
+      (forall (v : vaddr_t, p : wap_addr_t) ::
                     (!enclave_dead && e_excl_vaddr_2[v] && p == e_addr_map_2[v])
                         ==> e_excl_map[p]);
 
     // [Trace 1] `eid`'s VA->PA map is the same as e_addr_map_1
     invariant inv24: verif ==>
       (forall (v : vaddr_t) ::
-                (current_mode == mode_enclave && e_excl_vaddr_1[v]) ==> 
+                (current_mode == mode_enclave && e_excl_vaddr_1[v]) ==>
                     (cpu_1.cpu_addr_map[v] == e_addr_map_1[v]));
 
     // [Trace 2] `eid`'s VA->PA map is the same as e_addr_map_2
     invariant inv25: verif ==>
       (forall (v : vaddr_t) ::
-                (current_mode == mode_enclave && e_excl_vaddr_2[v]) ==> 
+                (current_mode == mode_enclave && e_excl_vaddr_2[v]) ==>
                     (cpu_2.cpu_addr_map[v] == e_addr_map_2[v]));
-    
+
     //-------------------------------------------------------------------//
     // CPU state is the same                                             //
     //-------------------------------------------------------------------//
-    
+
     // Untrusted mode has the same PC
     invariant inv26: verif ==>
       (current_mode == mode_untrusted) ==> (cpu_1.cpu_pc == cpu_2.cpu_pc);
-    
+
     // Same enclave runs at all times
     invariant inv27: verif ==>
       (cpu_1.cpu_enclave_id == cpu_2.cpu_enclave_id);
-    
+
     // Untrusted mode has the same registers
     invariant inv28: verif ==>
       (current_mode == mode_untrusted) ==> (cpu_1.cpu_regs == cpu_2.cpu_regs);
-    
+
     // Untrusted mode has the same VA->PA mapping
     invariant inv29: verif ==>
       (current_mode == mode_untrusted) ==>
@@ -363,19 +377,30 @@ module mem_confidentiality_proof {
     invariant inv30: verif ==>
       (current_mode == mode_untrusted) ==>
         (cpu_1.cpu_addr_map == cpu_2.cpu_addr_map);
-    
+
     // Owner map is the same at all times
     invariant inv31: verif ==>
       (forall (pa : wap_addr_t) :: (cpu_1.cpu_owner_map[pa] == cpu_2.cpu_owner_map[pa]));
-    
+
+    // Memory is owned by valid enclaves, the OS, or the blocked enclave
+    invariant inv_blocked_owner_1: verif ==>
+      (forall (pa : wap_addr_t) ::
+        (cpu_1.cpu_owner_map[pa] == tap_blocked_enc_id ||
+         cpu_1.cpu_owner_map[pa] == tap_null_enc_id ||
+         (valid_enclave_id(cpu_1.cpu_owner_map[pa]) &&
+           cpu_1.tap_enclave_metadata_valid[cpu_1.cpu_owner_map[pa]])));
+
     // Memory is the same except for the protected enclave memory
     invariant inv32: verif ==>
-      (forall (pa : wap_addr_t) :: !e_excl_map[pa] ==> (cpu_1.cpu_mem[pa] == cpu_2.cpu_mem[pa]));
+      (forall (pa : wap_addr_t) ::
+        ((!enclave_dead ==> !e_excl_map[pa]) &&
+         cpu_1.cpu_owner_map[pa] != tap_blocked_enc_id) ==>
+            (cpu_1.cpu_mem[pa] == cpu_2.cpu_mem[pa]));
 
     //-------------------------------------------------------------------//
     // OS state is the same                                              //
     //-------------------------------------------------------------------//
-    // OS va->pa 
+    // OS va->pa
     invariant inv33: verif ==>
       (cpu_1.untrusted_addr_valid == cpu_2.untrusted_addr_valid);
     invariant inv34: verif ==>
@@ -393,7 +418,7 @@ module mem_confidentiality_proof {
 
     // valid is the same
     invariant inv37: verif ==>
-      (forall (e : tap_enclave_id_t) :: 
+      (forall (e : tap_enclave_id_t) ::
         ((e != eid) ==>
           (cpu_1.tap_enclave_metadata_valid[e] == cpu_2.tap_enclave_metadata_valid[e])));
 
@@ -411,7 +436,7 @@ module mem_confidentiality_proof {
 
     // addr_excl is the same except for eid.
     invariant inv40: verif ==>
-      (forall (e : tap_enclave_id_t) :: 
+      (forall (e : tap_enclave_id_t) ::
         (cpu_1.tap_enclave_metadata_valid[e] && cpu_2.tap_enclave_metadata_valid[e] && e != eid) ==>
             (cpu_1.tap_enclave_metadata_addr_excl[e] == cpu_2.tap_enclave_metadata_addr_excl[e]));
 
@@ -458,13 +483,13 @@ module mem_confidentiality_proof {
     // invariant inv_root_not_self_1: (!enclave_dead && verif) ==> (forall (e : tap_enclave_id_t) :: valid_enclave_id(e) ==> cpu_1.tap_enclave_metadata_root_snapshot[e] != e);
     // invariant inv_root_not_self_2: (!enclave_dead && verif) ==> (forall (e : tap_enclave_id_t) :: valid_enclave_id(e) ==> cpu_2.tap_enclave_metadata_root_snapshot[e] != e);
 
-    invariant b1: (!enclave_dead && verif) ==> (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
-                (valid_enclave_id(e) && !cpu_1.tap_enclave_metadata_valid[e]) ==> 
+    invariant b1: (verif) ==> (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
+                (valid_enclave_id(e) && !cpu_1.tap_enclave_metadata_valid[e]) ==>
                     (cpu_1.cpu_owner_map[pa] != e));
-    invariant b2: (!enclave_dead && verif) ==> (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
-                (valid_enclave_id(e) && !cpu_2.tap_enclave_metadata_valid[e]) ==> 
+    invariant b2: (verif) ==> (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
+                (valid_enclave_id(e) && !cpu_2.tap_enclave_metadata_valid[e]) ==>
                     (cpu_2.cpu_owner_map[pa] != e));
-    
+
     // invariant b3: (!enclave_dead && verif) ==> (forall (pa: wap_addr_t, e : tap_enclave_id_t) ::
     //             cpu_1.tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_1.cpu_owner_map[pa] == e);
     // invariant b4: (!enclave_dead && verif) ==> (forall (pa: wap_addr_t, e : tap_enclave_id_t) ::
@@ -602,7 +627,7 @@ module mem_confidentiality_proof {
     //         cpu_2.tap_enclave_metadata_valid[e] &&
     //         valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[e]) ==>
     //         cpu_2.tap_enclave_metadata_is_snapshot[cpu_2.tap_enclave_metadata_root_snapshot[e]]));
-    
+
     // `eid` should never be a root. This is true if clone isn't callable on `eid`
     // FIXME: Remove this and assume that if `eid` is copied, the enclave can't be read from?
     // invariant eid_never_root: verif ==>
@@ -680,6 +705,62 @@ module mem_confidentiality_proof {
       (enclave_dead == cpu_1.tap_enclave_dead && enclave_dead == cpu_2.tap_enclave_dead);
 
     //-------------------------------------------------------------------//
+    // Enclave death invariants                                          //
+    //-------------------------------------------------------------------//
+    invariant dead_implies_invalid:
+      (verif && enclave_dead) ==>
+        (!cpu_1.tap_enclave_metadata_valid[eid] && !cpu_2.tap_enclave_metadata_valid[eid]);
+    invariant dead_implies_untrusted:
+      (verif && enclave_dead) ==>
+        (current_mode == mode_untrusted &&
+          cpu_1.tap_current_mode == mode_untrusted &&
+          cpu_2.tap_current_mode == mode_untrusted);
+    invariant enclave_mode_implies_not_dead:
+      (verif && current_mode == mode_enclave) ==> !enclave_dead;
+
+    //-------------------------------------------------------------------//
+    // KMS invariants                                                    //
+    //-------------------------------------------------------------------//
+    invariant kms_key_same:
+      verif ==> (forall (e: tap_enclave_id_t) ::
+                  (valid_enclave_id(e)) ==>
+                    (cpu_1.tap_kms_key[e] == cpu_2.tap_kms_key[e]));
+    invariant kms_tag_same:
+      verif ==> (forall (e: tap_enclave_id_t) ::
+                  (valid_enclave_id(e)) ==>
+                    (cpu_1.tap_kms_tag[e] == cpu_2.tap_kms_tag[e]));
+
+    //-------------------------------------------------------------------//
+    // Storage invariants                                                //
+    //-------------------------------------------------------------------//
+    invariant storage_fresh_mem_same:
+      verif ==> (forall (e: tap_enclave_id_t) ::
+                  valid_enclave_id(e) ==>
+                    (forall (va : vaddr_t) ::
+                      (cpu_1.tap_storage_addr_valid[e][fresh][va] &&
+                       cpu_2.tap_storage_addr_valid[e][fresh][va]) ==>
+                        (cpu_1.tap_storage_mem[e][fresh][va] == cpu_2.tap_storage_mem[e][fresh][va])));
+    invariant storage_stale_mem_same:
+      verif ==> (forall (e: tap_enclave_id_t) ::
+                  valid_enclave_id(e) ==>
+                    (forall (va : vaddr_t) ::
+                      (cpu_1.tap_storage_addr_valid[e][stale][va] &&
+                       cpu_2.tap_storage_addr_valid[e][stale][va]) ==>
+                        (cpu_1.tap_storage_mem[e][stale][va] == cpu_2.tap_storage_mem[e][stale][va])));
+    invariant storage_key_same:
+      verif ==> (forall (e: tap_enclave_id_t) ::
+                  (valid_enclave_id(e)) ==>
+                    (cpu_1.tap_storage_key[e] == cpu_2.tap_storage_key[e]));
+    invariant storage_tag_same:
+      verif ==> (forall (e: tap_enclave_id_t) ::
+                  (valid_enclave_id(e)) ==>
+                    (cpu_1.tap_storage_tag[e] == cpu_2.tap_storage_tag[e]));
+    invariant storage_addr_valid_same:
+      verif ==> (forall (e: tap_enclave_id_t) ::
+                  (valid_enclave_id(e)) ==>
+                    (cpu_1.tap_storage_addr_valid[e] == cpu_2.tap_storage_addr_valid[e]));
+
+    //-------------------------------------------------------------------//
     // Axioms                                                            //
     //-------------------------------------------------------------------//
 
@@ -696,31 +777,62 @@ module mem_confidentiality_proof {
 
     // Assume that the attacker has access to only user side operations.
     axiom tap_proof_op_valid(r_proof_op);
-    
+
     // Assume that the enclave has access to only enclave operations.
     axiom tap_proof_op_valid_in_enclave(e_proof_op);
 
     // CASE 1: Protected enclave `eid` is not cloned
-    axiom r_parent_eid != eid && cpu_1.tap_r_parent_eid != eid && cpu_2.tap_r_parent_eid != eid;
+    // axiom r_parent_eid != eid && cpu_1.tap_r_parent_eid != eid && cpu_2.tap_r_parent_eid != eid;
 
     next {
       // Always verify the next block
       assume (verif);
-      // Assume that the trusted enclave is not destroyed
-      // This covers the termination case because it can die after the transition step
-      assume (!enclave_dead && !cpu_1.tap_enclave_dead && !cpu_2.tap_enclave_dead);
-      assume r_parent_eid != eid && cpu_1.tap_r_parent_eid != eid && cpu_2.tap_r_parent_eid != eid;
+      assume (enclave_dead == enclave_dead_1);
+      assume (current_mode == current_mode_1);
+
 
       next(cpu_1); next(cpu_2);
 
       // We don't care what happened to load_address, but store_addr and store_data
       // must store the same value outside of memory.
       assume (!e_excl_vaddr_1'[load_addr_1'] || !e_excl_vaddr_2'[load_addr_2']) ==>
-             ((load_addr_1' == load_addr_2') && 
+             ((load_addr_1' == load_addr_2') &&
               (cpu_1.cpu_addr_map[load_addr_1'] == cpu_2.cpu_addr_map[load_addr_2']));
       assume (!e_excl_vaddr_1'[store_addr_1'] || !e_excl_vaddr_2'[store_addr_2']) ==>
                  (store_addr_1' == store_addr_2' && store_data_1' == store_data_2' &&
                   cpu_1.cpu_addr_map[store_addr_1'] == cpu_2.cpu_addr_map[store_addr_2']);
+
+      // If attacker created key, the created keys must be the same
+      assume (r_proof_op == tap_proof_op_create_key) ==>
+              ((cpu_1').tap_kms_key[r_eid] == (cpu_2').tap_kms_key[r_eid]);
+
+      // If attacker tampered the storage, the storage must be tampered the same way
+      assume (r_proof_op == tap_proof_op_tamper_storage) ==>
+              ((cpu_1').tap_storage_mem[r_eid][fresh] ==
+               (cpu_2').tap_storage_mem[r_eid][fresh]);
+      assume (r_proof_op == tap_proof_op_tamper_storage) ==>
+              ((cpu_1').tap_storage_key[r_eid][fresh] ==
+               (cpu_2').tap_storage_key[r_eid][fresh]);
+      assume (r_proof_op == tap_proof_op_tamper_storage) ==>
+              ((cpu_1').tap_storage_tag[r_eid][fresh] ==
+               (cpu_2').tap_storage_tag[r_eid][fresh]);
+      assume (r_proof_op == tap_proof_op_tamper_storage) ==>
+              ((cpu_1').tap_storage_addr_valid[r_eid][fresh] ==
+               (cpu_2').tap_storage_addr_valid[r_eid][fresh]);
+
+      // If the client enclave stores to storage, the storage must be stored the same way
+      assume (e_proof_op == tap_proof_op_store_storage) ==>
+              ((cpu_1').tap_storage_mem[cpu_1.cpu_enclave_id][fresh] ==
+               (cpu_2').tap_storage_mem[cpu_2.cpu_enclave_id][fresh]);
+      assume (e_proof_op == tap_proof_op_store_storage) ==>
+              ((cpu_1').tap_storage_key[cpu_1.cpu_enclave_id][fresh] ==
+               (cpu_2').tap_storage_key[cpu_2.cpu_enclave_id][fresh]);
+      assume (e_proof_op == tap_proof_op_store_storage) ==>
+              ((cpu_1').tap_storage_tag[cpu_1.cpu_enclave_id][fresh] ==
+               (cpu_2').tap_storage_tag[cpu_2.cpu_enclave_id][fresh]);
+      assume (e_proof_op == tap_proof_op_store_storage) ==>
+              ((cpu_1').tap_storage_addr_valid[cpu_1.cpu_enclave_id][fresh] ==
+               (cpu_2').tap_storage_addr_valid[cpu_2.cpu_enclave_id][fresh]);
 
       // assert (current_mode_1' == current_mode_2');
 

@@ -19,7 +19,7 @@ module mem_confidentiality_proof {
 
     // initialize state of first cpu
     call (current_mode) = cpu_1.InitialHavoc();
-    
+
     // Sanity check: The current PC is executable
     assert tap_addr_perm_x(cpu_1.cpu_addr_valid[cpu_1.cpu_pc]);
 
@@ -32,11 +32,11 @@ module mem_confidentiality_proof {
     //        and hence the owner would no longer be `cpu_enclave_id`'s (null enclave's)
     //        To fix this, we may need to check that null enclave's memory is free first.
     // assert (cpu_1.cpu_owner_map[cpu_1.cpu_addr_map[cpu_1.cpu_pc]] == cpu_1.cpu_enclave_id);
-    
+
     // After initial havoc by the adversary, no enclave should be running
     assert cpu_1.cpu_enclave_id == tap_null_enc_id;
- 
-    // Initialize the untrusted (OS) state with sane values.
+
+    // Initialize the untrusted (OS) state with same values.
     call cpu_1.InitUntrustedState(cpu_1.cpu_addr_valid, cpu_1.cpu_addr_map, cpu_1.cpu_pc);
 
     // Set CPU2 to have the same initial states as CPU1
@@ -48,7 +48,7 @@ module mem_confidentiality_proof {
       cpu_1.cpu_addr_valid,
       cpu_1.cpu_addr_map,
       cpu_1.cpu_owner_map,
-      cpu_1.cache_valid_map, 
+      cpu_1.cache_valid_map,
       cpu_1.cache_tag_map,
       cpu_1.untrusted_addr_valid,
       cpu_1.untrusted_addr_map,
@@ -62,12 +62,21 @@ module mem_confidentiality_proof {
       cpu_1.tap_enclave_metadata_pc,
       cpu_1.tap_enclave_metadata_regs,
       cpu_1.tap_enclave_metadata_paused,
-      cpu_1.tap_enclave_metadata_cache_conflict
+      cpu_1.tap_enclave_metadata_cache_conflict,
       // cpu_1.tap_enclave_metadata_is_snapshot,
       // cpu_1.tap_enclave_metadata_child_count,
       // cpu_1.tap_enclave_metadata_root_snapshot,
       // cpu_1.tap_enclave_metadata_wap_addr_free
+      cpu_1.tap_enclave_metadata_key,
+      cpu_1.tap_enclave_metadata_tag,
+      cpu_1.tap_kms_key,
+      cpu_1.tap_kms_tag,
+      cpu_1.tap_storage_key,
+      cpu_1.tap_storage_tag,
+      cpu_1.tap_storage_mem,
+      cpu_1.tap_storage_addr_valid
     );
+
 
     // Launch should not leave the PC in an untenable sitation
     assume !e_excl_map[cpu_1.cpu_addr_map[cpu_1.cpu_pc]];
@@ -109,7 +118,7 @@ module mem_confidentiality_proof {
       //   // Sanity check: the parent root snapshot should be a snapshot
       //   assert (valid_enclave_id(parent_root_snapshot) ==>
       //             cpu_1.tap_enclave_metadata_is_snapshot[parent_root_snapshot]);
-  
+
       //   // Assume the parent or root snapshot's memory ownership to be the same
       //   assume (forall (p: wap_addr_t) :: (e_root_excl_map[p] <==>
       //             ((cpu_1.cpu_owner_map[p] == parent_root_snapshot || cpu_1.cpu_owner_map[p] == r_parent_eid) &&
@@ -124,19 +133,19 @@ module mem_confidentiality_proof {
 
       //   // If the parent has a root snapshot, it's also identical
       //   assume (tap_metadata_equal(parent_root_snapshot));
-        
+
       //   // The enclave in the parent traces owns PA defined by e_root_excl_map
-      //   assume (forall (pa: wap_addr_t) :: 
+      //   assume (forall (pa: wap_addr_t) ::
       //                 ((cpu_1.cpu_owner_map[pa] == cpu_1.tap_enclave_metadata_root_snapshot[eid]) <==>
       //                   e_root_excl_map[pa]));
-      //   assume (forall (pa: wap_addr_t) :: 
+      //   assume (forall (pa: wap_addr_t) ::
       //                 ((cpu_2.cpu_owner_map[pa] == cpu_2.tap_enclave_metadata_root_snapshot[eid]) <==>
       //                   e_root_excl_map[pa]));
 
       //   // Clone `eid` in trace 1
       //   call (status) = cpu_1.clone(eid, r_parent_eid, e_excl_map);
       //   assume status == enclave_op_success;
-  
+
       //   // Clone `eid` in trace 2
       //   call (status) = cpu_2.clone(eid, r_parent_eid, e_excl_map);
       //   assume status == enclave_op_success;
@@ -157,8 +166,8 @@ module mem_confidentiality_proof {
     current_mode = mode_untrusted;
 
     // The adversary does not call clone on the protected eid
-    assume (r_parent_eid != eid);
-    assume (r_parent_eid == cpu_1.tap_r_parent_eid && r_parent_eid == cpu_1.tap_r_parent_eid);
+    // assume (r_parent_eid != eid);
+    // assume (r_parent_eid == cpu_1.tap_r_parent_eid && r_parent_eid == cpu_1.tap_r_parent_eid);
 
     // if (!enclave_dead) {
     //   havoc r_proof_op;   havoc r_eid;    havoc r_pc;   havoc r_read;   havoc r_write;
@@ -179,8 +188,8 @@ module mem_confidentiality_proof {
 
     //   // trace_1
     //   // call (observation_1, current_mode_1, enclave_dead_1, status_1, excp_1_1, excp_1_2, hit_1_1, hit_1_2) =
-    //   //                         cpu_1.ObserverStep(k_mem_observer_t, current_mode, eid, r_eid, r_parent_eid, r_proof_op, 
-    //   //                                     r_pc, r_read, r_write, r_data, 
+    //   //                         cpu_1.ObserverStep(k_mem_observer_t, current_mode, eid, r_eid, r_parent_eid, r_proof_op,
+    //   //                                     r_pc, r_read, r_write, r_data,
     //   //                                     l_vaddr, s_vaddr, s_data,
     //   //                                     r_pt_eid, r_pt_va,
     //   //                                     pt_eid, pt_vaddr, pt_valid, pt_paddr,
@@ -200,8 +209,8 @@ module mem_confidentiality_proof {
 
     //   // // trace_2
     //   // call (observation_2, current_mode_2, enclave_dead_2, status_2, excp_2_1, excp_2_2, hit_2_1, hit_2_2) =
-    //   //                         cpu_2.ObserverStep(k_mem_observer_t, current_mode, eid, r_eid, r_parent_eid, r_proof_op, 
-    //   //                                     r_pc, r_read, r_write, r_data, 
+    //   //                         cpu_2.ObserverStep(k_mem_observer_t, current_mode, eid, r_eid, r_parent_eid, r_proof_op,
+    //   //                                     r_pc, r_read, r_write, r_data,
     //   //                                     l_vaddr, s_vaddr, s_data,
     //   //                                     r_pt_eid, r_pt_va,
     //   //                                     pt_eid, pt_vaddr, pt_valid, pt_paddr,
