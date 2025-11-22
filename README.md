@@ -9,6 +9,7 @@
 To run the proof, you need to have the following installed:
 1. [UCLID5](https://github.com/uclid-org/uclid)
 2. [cvc5](https://github.com/cvc5/cvc5)
+
 Check out the repositories for installation instructions.
 
 The proof consists of four parts. Below are the commands to run each part:
