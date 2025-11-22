@@ -23,7 +23,7 @@ The proof consists of four parts. Below are the commands to run each part:
    cd AbstractPlatform/proofs
    make measurement-proof-printed
    ```
-   Note that you can enable case splitting by uncommenting relevant lines in [measurement-proof.ucl](AbstractPlatform/proof/measurement-proof.ucl) to speed up the proof.
+   Note that you can enable case splitting by uncommenting relevant lines in [measurement-proof.ucl](AbstractPlatform/proofs/measurement-proof.ucl) to speed up the proof.
 
 3. To run the integrity proof:
     ```bash
