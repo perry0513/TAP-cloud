@@ -1,4 +1,4 @@
-COMMON_SOURCE=../../../Common/common-types.ucl
+COMMON_SOURCE=../../Common/common-types.ucl
 AP_SOURCE=./../modules/ap-types.ucl
 CACHE_SOURCE=./../modules/tap-mod-cache.ucl
 CPU_SOURCES=$(COMMON_SOURCE) $(AP_SOURCE) $(CACHE_SOURCE) ./../modules/tap-mod-cpu.ucl
