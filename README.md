@@ -1,9 +1,12 @@
 # STAP
 
+This repository provides the formal models, machine-checked proofs, and supplementary materials for the paper "A Formal Foundation for Secure Stateful Remote Execution of Enclaves in the Cloud."
+
 ## Directory Structure
 
-* `AbstractPlatform`: A formal model for STAP extended from TAP
+* `AbstractPlatform`: Formal model and machine-checked proofs for STAP extended from TAP
 * `Common`: Some common definitions for the formal model
+* `natural_deudction_proof.pdf`: Fitch-style proof for Theorem 2 in the paper.
 
 ## Running the Proof
 To run the proof, you need to have the following installed:
@@ -13,7 +16,7 @@ To run the proof, you need to have the following installed:
 Check out the repositories for installation instructions.
 
 The proof consists of four parts. Below are the commands to run each part:
-1. To run procedural verification for each operations and procedures in the model:
+1. To run procedural verification for each operation (procedure) in the formal model:
    ```bash
    cd AbstractPlatform/modules
    make tap-printed
