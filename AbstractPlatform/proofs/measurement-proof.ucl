@@ -830,6 +830,15 @@ module measurement_proof {
       invariant (kms_tag_updated ==> cpu_1.tap_storage_tag[eid_1][fresh] == cpu_1.tap_kms_tag[eid_1]);
       invariant (kms_tag_updated ==> cpu_2.tap_storage_tag[eid_2][fresh] == cpu_2.tap_kms_tag[eid_2]);
 
+      // Between the store and the commit, the tag the enclave is about to commit
+      // chains directly from the one the KMS currently holds.  The KMS performs a
+      // conditional append, so this is what makes the commit land rather than
+      // abort.
+      invariant ((already_stored && !kms_tag_updated) ==>
+                  tag_prev(cpu_1.tap_enclave_metadata_tag[eid_1]) == cpu_1.tap_kms_tag[eid_1]);
+      invariant ((already_stored && !kms_tag_updated) ==>
+                  tag_prev(cpu_2.tap_enclave_metadata_tag[eid_2]) == cpu_2.tap_kms_tag[eid_2]);
+
       // Should not abort because initially storage is not tampered and there is no attacker
       invariant (abort_1 == false && abort_2 == false);
 
