@@ -174,14 +174,16 @@ failure throughout, never as a pass.
 
 | proof | case splits | obligations | sat | unknown |
 |---|---|---|---|---|
-| `tap` module (CPU + operations) | -- | 6130 | 0 | 0 |
+| `tap` module (CPU + operations) | -- | 5635 | 0 | 0 |
 | Secure measurement | -- | 287 | 0 | 0 |
-| Generalized (reduced) integrity | 23 | 5728 | 0 | 0 |
-| Memory confidentiality | 23 | 5240 | 0 | 0 |
+| Generalized (reduced) integrity | 22 | 5576 | 0 | 0 |
+| Memory confidentiality | 22 | 4972 | 0 | 0 |
 
 The integrity case splits are the seven enclave instructions (`compute`, `exit`,
-`pause`, `storePS`, `loadPS`, `getKeyTag`, `updateTag`) and sixteen adversary
-operations, including `replayPS`.
+`pause`, `storePS`, `loadPS`, `getKeyTag`, `updateTag`) and fifteen adversary
+operations, including `replayPS`.  `rollbackPS` is gone (appendix A.3), which is
+why there is one case split fewer than the run before it and why the module has
+fewer obligations.
 
 ## 10. Vacuity
 
