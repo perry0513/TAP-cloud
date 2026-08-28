@@ -44,6 +44,14 @@ module integrity_proof {
                     !valid_tag(cpu_1.tap_storage_tag[eid][fresh]) &&
                     !valid_key(cpu_1.tap_storage_key[eid][stale]) &&
                     !valid_tag(cpu_1.tap_storage_tag[eid][stale]));
+            // ... and empty storage holds the blank ciphertext, which is what the
+            // null tag binds.  Content binding therefore holds from the start.
+            assume (cpu_1.tap_storage_mem[eid][fresh] == kzero_storage_mem_t &&
+                    cpu_1.tap_storage_addr_valid[eid][fresh] == kempty_vaddr2bool_t &&
+                    cpu_1.tap_storage_mem[eid][stale] == kzero_storage_mem_t &&
+                    cpu_1.tap_storage_addr_valid[eid][stale] == kempty_vaddr2bool_t);
+            // The enclave has not yet written anything, so there is nothing to replay.
+            assume (forall (tg : tag_t) :: !cpu_1.tap_storage_produced[eid][tg]);
 
             // Launch `eid` in trace 2
             call (status) = cpu_2.launch(eid, e_addr_valid, e_addr_map, e_excl_vaddr, e_excl_map, e_entrypoint);
@@ -58,6 +66,14 @@ module integrity_proof {
                     !valid_tag(cpu_2.tap_storage_tag[eid][fresh]) &&
                     !valid_key(cpu_2.tap_storage_key[eid][stale]) &&
                     !valid_tag(cpu_2.tap_storage_tag[eid][stale]));
+            // ... and empty storage holds the blank ciphertext, which is what the
+            // null tag binds.  Content binding therefore holds from the start.
+            assume (cpu_2.tap_storage_mem[eid][fresh] == kzero_storage_mem_t &&
+                    cpu_2.tap_storage_addr_valid[eid][fresh] == kempty_vaddr2bool_t &&
+                    cpu_2.tap_storage_mem[eid][stale] == kzero_storage_mem_t &&
+                    cpu_2.tap_storage_addr_valid[eid][stale] == kempty_vaddr2bool_t);
+            // The enclave has not yet written anything, so there is nothing to replay.
+            assume (forall (tg : tag_t) :: !cpu_2.tap_storage_produced[eid][tg]);
           }
           // (create_op == create_by_clone) : {
           //   var parent_root_snapshot: tap_enclave_id_t;
@@ -124,8 +140,13 @@ module integrity_proof {
         assume (!storage_tampered && !cpu_1.tap_storage_tampered && !cpu_2.tap_storage_tampered);
         assume (!storage_rolledback && !cpu_1.tap_storage_rolledback && !cpu_2.tap_storage_rolledback);
 
-        assume (!loaded && !stored);
-        assume (!already_stored && !kms_storage_key_sync && !kms_storage_tag_sync && !kms_key_deleted);
+        // The enclave has just been launched: it is syncing, has not fetched its
+        // key, and has nothing pending.
+        assume (phase == ph_syncing && !key_fetched);
+        // (`already_stored`, `kms_storage_key_sync`, `kms_storage_tag_sync` and
+        // `kms_key_deleted` are macros over trace 1's state; the assumptions above
+        // -- a freshly created key, a null KMS tag and empty storage -- already
+        // pin all four to false.)
 
         assume (status == status_1 && status == status_2);
     }

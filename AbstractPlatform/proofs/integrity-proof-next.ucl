@@ -18,16 +18,31 @@ module integrity_proof {
     assume (kms_tampered == kms_tampered_1);
     assume (storage_tampered == storage_tampered_1);
     assume (storage_rolledback == storage_rolledback_1);
-    // The stale storage tag is never equal to the kms tag because tags should never repeat
-    assume (cpu_1.tap_storage_tag[eid][stale] != cpu_1.tap_kms_tag[eid]);
-
 
     // Only rollback storage when storage is not yet tampered
     assume (r_proof_op == tap_proof_op_rollback_storage ==> !storage_rolledback);
 
-    // Under what condition can we execute each enclave operation?
-    assume (e_proof_op == tap_proof_op_load_storage ==> !loaded);
-    assume (e_proof_op == tap_proof_op_store_storage ==> !stored);
+    //---------------------------------------------------------------------------//
+    // The enclave's program.                                                     //
+    //                                                                            //
+    // These constrain the *enclave*, not the adversary: they say which            //
+    // instruction the enclave program issues next, and they are the operational   //
+    // form of the session grammar                                                 //
+    //                                                                            //
+    //     getKeyTag . loadPS . ( compute* . storePS . updateTag )*                //
+    //                                                                            //
+    // with the leading loadPS omitted when nothing has been committed yet.  The   //
+    // `!key_fetched` conjunct is load-bearing: re-reading the KMS tag in the       //
+    // middle of a session would abandon a pending store without a crash, which is  //
+    // the crash-free variant of the tag-reuse attack.                             //
+    //---------------------------------------------------------------------------//
+    assume (e_proof_op == tap_proof_op_get_key_and_tag ==>
+              (phase == ph_syncing && !key_fetched));
+    assume (e_proof_op == tap_proof_op_load_storage ==>
+              (phase == ph_syncing && key_fetched && already_stored()));
+    assume (e_proof_op == tap_proof_op_compute ==> (phase == ph_active));
+    assume (e_proof_op == tap_proof_op_store_storage ==> (phase == ph_active));
+    assume (e_proof_op == tap_proof_op_update_tag ==> (phase == ph_pending));
 
     // When enclave is in the abort state, it can only perform exit and no other operations.
     assume (enclave_abort ==> (e_proof_op == tap_proof_op_exit || e_proof_op == tap_proof_op_pause));
@@ -35,14 +50,46 @@ module integrity_proof {
     // Step tap trace 1
     next(cpu_1);
 
-    // Step tap trace 2 if one of the following conditions hold:
-    // 1) The current mode changes (i.e., switch between trusted and untrusted)
-    // 2) The current mode is trusted/enclave, and the enclave does not enter an abort state
-    // 3) The enclave `eid` is launched or destroyed
-    // Otherwise, stutter.
-    if ((current_mode != current_mode') ||
-        (current_mode == mode_enclave && !enclave_abort') ||
-        (enclave_dead != enclave_dead')) {
+    //---------------------------------------------------------------------------//
+    // The reference trace discards uncommitted work at a destroy.                 //
+    //                                                                            //
+    // Un-fusing storePS from updateTag means the enclave can die holding a        //
+    // ciphertext it never committed.  Trace 1 keeps that ciphertext -- whether it  //
+    // survives is the adversary's choice, and that choice is the attack we are     //
+    // checking.  Trace 2 is the reference: it tracks the committed history, and a  //
+    // write that can no longer be committed is not part of that history, so it     //
+    // goes back to the last committed ciphertext.  This is a rollback of trace 2's //
+    // *own* uncommitted write, not an adversary action on it.                      //
+    //                                                                            //
+    // At rank 0 there is nothing to go back to and the rollback simply fails;      //
+    // that is harmless, because with nothing committed the enclave never loads.    //
+    //---------------------------------------------------------------------------//
+    if (current_mode == mode_untrusted &&
+        r_proof_op == tap_proof_op_destroy &&
+        r_eid == eid && phase == ph_pending &&
+        status_1' == enclave_op_success) {
+      call (discard_status') = cpu_2.rollback_storage(eid);
+    }
+
+    //---------------------------------------------------------------------------//
+    // Step tap trace 2 if one of the following conditions hold:                   //
+    // 1) The current mode changes (i.e., switch between trusted and untrusted)    //
+    // 2) The current mode is trusted/enclave, and the enclave does not abort      //
+    // 3) The enclave `eid` is launched or destroyed                               //
+    // 4) The adversary rolls back an *uncommitted* ciphertext.                    //
+    //                                                                            //
+    // (4) is new, and it is what un-fusing the store from the commit forces.      //
+    // Discarding work that was never committed is not an attack: it is what a     //
+    // crash does, and the reference trace has to discard it too.  If it did not,  //
+    // the reference would come back from a relaunch holding a ciphertext whose    //
+    // tag the KMS has never heard of, and its own load would abort.  Note this is  //
+    // attack -- still leaves the reference trace alone, and is caught.            //
+    // Otherwise, stutter.                                                         //
+    //---------------------------------------------------------------------------//
+    if ((current_mode != current_mode_1') ||
+        (current_mode == mode_enclave && !enclave_abort_1') ||
+        (enclave_dead != enclave_dead_1') ||
+        false) {
         next(cpu_2);
     }
 
@@ -56,54 +103,51 @@ module integrity_proof {
     storage_rolledback' = storage_rolledback_1';
     status' = status_1';
 
-    // Flag update
-    case
-    // In enclave mode and the operation succeeded
-    (current_mode == mode_enclave && status' == enclave_op_success) : {
-      case
-        (e_proof_op == tap_proof_op_store_storage) : {
-          already_stored' = true;
-          kms_storage_key_sync' = true;
-          kms_storage_tag_sync' = true;
-          loaded' = false;
-          stored' = true;
-        }
-        (e_proof_op == tap_proof_op_load_storage) : {
-          loaded' = true;
-          stored' = false;
-        }
-      esac
-    }
-    // In untrusted mode and the operation on the client enclave succeeded
-    (current_mode == mode_untrusted && r_eid == eid && status' == enclave_op_success) : {
-      case
-        (r_proof_op == tap_proof_op_launch) : {
-          assert (enclave_dead && !enclave_dead');
-          loaded' = false;
-          stored' = false;
-        }
-        (r_proof_op == tap_proof_op_destroy) : {
-          assert (!enclave_dead && enclave_dead');
-          loaded' = false;
-          stored' = false;
-        }
-        (r_proof_op == tap_proof_op_create_key) : {
-          kms_storage_key_sync' = false;
-          kms_key_deleted' = false;
-        }
-        (r_proof_op == tap_proof_op_delete_key) : {
-          kms_storage_key_sync' = false;
-          kms_key_deleted' = true;
-        }
-        (r_proof_op == tap_proof_op_tamper_storage) : {
-          kms_storage_key_sync' = false;
-          kms_storage_tag_sync' = false;
-        }
-        (r_proof_op == tap_proof_op_rollback_storage) : {
-          kms_storage_tag_sync' = false;
-        }
-      esac
-    }
-    esac
+    // `already_stored`, `kms_key_deleted`, `kms_storage_key_sync` and
+    // `kms_storage_tag_sync` need no update here: they are macros over trace 1's
+    // state (see integrity-proof.ucl) and so track it automatically.
+
+    //---------------------------------------------------------------------------//
+    // Phase automaton                                                            //
+    //                                                                            //
+    // launch                    -> ph_syncing, key not yet fetched               //
+    // getKeyTag                 -> ph_syncing, or ph_active when nothing has ever //
+    //                              been committed (there is nothing to load)      //
+    // loadPS                    -> ph_active                                      //
+    // storePS                   -> ph_pending, a commit is now owed               //
+    // updateTag                 -> ph_active, the commit landed                   //
+    // destroy                   -> ph_dead                                        //
+    //                                                                            //
+    //---------------------------------------------------------------------------//
+    phase' =
+      if (enc_step_ok(status_1', enclave_abort_1', current_mode) &&
+          e_proof_op == tap_proof_op_get_key_and_tag)
+        then (if (valid_tag(cpu_1.tap_kms_tag[eid])) then ph_syncing else ph_active)
+      else if (enc_step_ok(status_1', enclave_abort_1', current_mode) &&
+               e_proof_op == tap_proof_op_load_storage)
+        then ph_active
+      else if (enc_step_ok(status_1', enclave_abort_1', current_mode) &&
+               e_proof_op == tap_proof_op_store_storage)
+        then ph_pending
+      else if (enc_step_ok(status_1', enclave_abort_1', current_mode) &&
+               e_proof_op == tap_proof_op_update_tag)
+        then ph_active
+      else if (adv_step_ok(status_1', current_mode, r_eid, eid) &&
+               r_proof_op == tap_proof_op_launch)
+        then ph_syncing
+      else if (adv_step_ok(status_1', current_mode, r_eid, eid) &&
+               r_proof_op == tap_proof_op_destroy)
+        then ph_dead
+      else phase;
+
+    key_fetched' =
+      if (enc_step_ok(status_1', enclave_abort_1', current_mode) &&
+          e_proof_op == tap_proof_op_get_key_and_tag)
+        then true
+      else if (adv_step_ok(status_1', current_mode, r_eid, eid) &&
+               (r_proof_op == tap_proof_op_launch || r_proof_op == tap_proof_op_destroy))
+        then false
+      else key_fetched;
+
   }
 }

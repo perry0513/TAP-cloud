@@ -37,12 +37,16 @@ module integrity_proof {
     var storage_tampered, storage_tampered_1, storage_tampered_2 : boolean;
     var storage_rolledback, storage_rolledback_1, storage_rolledback_2 : boolean;
 
-    var loaded                : boolean;
-    var stored                : boolean;
-    var already_stored        : boolean;
-    var kms_storage_key_sync  : boolean;
-    var kms_storage_tag_sync  : boolean;
-    var kms_key_deleted       : boolean;
+    // Where the enclave has got to in its program.  See `phase_t` in
+    // proof-common.ucl; the scheduling assumptions in integrity-proof-next.ucl
+    // are what make this an automaton rather than a decoration.
+    var phase                 : phase_t;
+    var key_fetched           : boolean;
+    // Scratch for the reference trace's discard at a destroy (see
+    // integrity-proof-next.ucl).
+    var discard_status        : enclave_op_result_t;
+
+
 
     instance cpu_1: tap(tap_r_eid: (r_eid),
                         tap_r_parent_eid: (r_parent_eid),
@@ -104,6 +108,30 @@ module integrity_proof {
       // (cpu_1.tap_enclave_metadata_child_count[e] > 0   <==> cpu_2.tap_enclave_metadata_child_count[e] > 0) &&
       // (cpu_1.tap_enclave_metadata_root_snapshot[e] == cpu_2.tap_enclave_metadata_root_snapshot[e]) &&
       // (cpu_1.tap_enclave_metadata_wap_addr_free[e] == cpu_2.tap_enclave_metadata_wap_addr_free[e]);
+
+    // The four predicates below used to be ghost flags updated by hand at each
+    // operation.  They are pure functions of trace 1's state, so they are macros
+    // instead: splitting storePS from updateTag moves the point at which storage
+    // and the KMS agree, and hand-maintained flags are exactly what goes stale
+    // when that happens.
+    define already_stored() : boolean =
+      valid_tag(cpu_1.tap_kms_tag[eid]);
+    define kms_key_deleted() : boolean =
+      !valid_key(cpu_1.tap_kms_key[eid]);
+    define kms_storage_key_sync() : boolean =
+      (valid_key(cpu_1.tap_kms_key[eid]) &&
+        cpu_1.tap_storage_key[eid][fresh] == cpu_1.tap_kms_key[eid]);
+    // Guards for the phase automaton in integrity-proof-next.ucl.  They take the
+    // post-state values as arguments because a `define` cannot mention primed
+    // variables directly.
+    define enc_step_ok(st : enclave_op_result_t, ab : boolean, m : mode_t) : boolean =
+      (m == mode_enclave && st == enclave_op_success && !ab);
+    define adv_step_ok(st : enclave_op_result_t, m : mode_t, re : tap_enclave_id_t, e : tap_enclave_id_t) : boolean =
+      (m == mode_untrusted && re == e && st == enclave_op_success);
+
+    define kms_storage_tag_sync() : boolean =
+      (valid_tag(cpu_1.tap_kms_tag[eid]) &&
+        cpu_1.tap_storage_tag[eid][fresh] == cpu_1.tap_kms_tag[eid]);
 
     //----------------------------------------------------------------------//
     // TAP invariants                                                       //
@@ -526,57 +554,200 @@ module integrity_proof {
     //=============================================================================//
     invariant kms_key_valid_1: (verif && !kms_tampered_1) ==> valid_key(cpu_1.tap_kms_key[eid]);
     invariant kms_key_valid_2: verif ==> valid_key(cpu_2.tap_kms_key[eid]);
-    invariant kms_tag_valid_1: (verif && already_stored) ==> valid_tag(cpu_1.tap_kms_tag[eid]);
-    invariant kms_tag_valid_2: (verif && already_stored) ==> valid_tag(cpu_2.tap_kms_tag[eid]);
-    invariant kms_tag_invalid_1: (verif && !already_stored) ==> !valid_tag(cpu_1.tap_kms_tag[eid]);
-    invariant kms_tag_invalid_2: (verif && !already_stored) ==> !valid_tag(cpu_2.tap_kms_tag[eid]);
-    // invariant storage_key_invalid_2: (verif && !already_stored) ==> !valid_key(cpu_2.tap_storage_key[eid][fresh]);
+    invariant kms_tag_valid_1: (verif && already_stored()) ==> valid_tag(cpu_1.tap_kms_tag[eid]);
+    invariant kms_tag_valid_2: (verif && already_stored()) ==> valid_tag(cpu_2.tap_kms_tag[eid]);
+    invariant kms_tag_invalid_1: (verif && !already_stored()) ==> !valid_tag(cpu_1.tap_kms_tag[eid]);
+    invariant kms_tag_invalid_2: (verif && !already_stored()) ==> !valid_tag(cpu_2.tap_kms_tag[eid]);
+    // invariant storage_key_invalid_2: (verif && !already_stored()) ==> !valid_key(cpu_2.tap_storage_key[eid][fresh]);
 
     //=============================================================================//
     // Storage/KMS/enclave invariants                                              //
     //=============================================================================//
-    // After first store, data stored should be the same
+    // Equal tags carry equal ciphertexts.  This is the whole point of content
+    // binding, and it is what `loadPS` relies on: a tag the KMS vouches for
+    // identifies the committed state, not merely its position in the sequence.
+    // With counter-style tags the antecedent is satisfiable by a *discarded*
+    // attempt as well as by the committed state, and this invariant is false.
     invariant storage_same_mem:
-      (verif && already_stored && kms_storage_tag_sync) ==>
-        (forall (v : vaddr_t) ::
-          (cpu_1.tap_storage_addr_valid[eid][fresh][v] &&
-            cpu_2.tap_storage_addr_valid[eid][fresh][v])
-          ==> (cpu_1.tap_storage_mem[eid][fresh][v] == cpu_2.tap_storage_mem[eid][fresh][v]));
-    // After first store, addr_valid should be the same
+      (verif &&
+        cpu_1.tap_storage_tag[eid][fresh] == cpu_2.tap_storage_tag[eid][fresh]) ==>
+          (cpu_1.tap_storage_mem[eid][fresh] == cpu_2.tap_storage_mem[eid][fresh]);
     invariant storage_same_addr_valid:
-      (verif && already_stored && kms_storage_tag_sync) ==>
-        cpu_1.tap_storage_addr_valid[eid][fresh] == cpu_2.tap_storage_addr_valid[eid][fresh];
+      (verif &&
+        cpu_1.tap_storage_tag[eid][fresh] == cpu_2.tap_storage_tag[eid][fresh]) ==>
+          cpu_1.tap_storage_addr_valid[eid][fresh] == cpu_2.tap_storage_addr_valid[eid][fresh];
     // After first store, storage key shoud be equal to kms key
     invariant kms_storage_same_key_1:
-      (verif && already_stored && kms_storage_key_sync) ==>
+      (verif && already_stored() && kms_storage_key_sync()) ==>
         cpu_1.tap_storage_key[eid][fresh] == cpu_1.tap_kms_key[eid];
     invariant kms_storage_same_key_2:
-      (verif && already_stored) ==>
+      (verif && (already_stored() || phase == ph_pending)) ==>
           cpu_2.tap_storage_key[eid][fresh] == cpu_2.tap_kms_key[eid];
     invariant kms_storage_same_tag_1:
-      (verif && kms_storage_tag_sync) ==>
+      (verif && kms_storage_tag_sync()) ==>
         (valid_tag(cpu_1.tap_kms_tag[eid]) ==>
           cpu_1.tap_storage_tag[eid][fresh] == cpu_1.tap_kms_tag[eid]);
+    // The reference trace's storage holds the committed ciphertext, except inside
+    // the window, where it holds a write whose commit has not landed yet.  The
+    // window is the only place the two can differ, because trace 2 discards an
+    // uncommitted write as soon as the enclave that wrote it dies.
     invariant kms_storage_same_tag_2:
-      verif ==> cpu_2.tap_storage_tag[eid][fresh] == cpu_2.tap_kms_tag[eid];
+      (verif && phase != ph_pending && already_stored()) ==>
+        cpu_2.tap_storage_tag[eid][fresh] == cpu_2.tap_kms_tag[eid];
     // After first store, storage key and tag should be equal to enclave metadata key and tag
+    // Outside the window, a storage tag that matches the KMS also matches the tag
+    // the enclave is working with.  Inside the window it does not: the enclave has
+    // moved one link ahead of the committed tag, which is the whole point of the
+    // window, so a rollback there can restore a ciphertext the enclave will not
+    // accept.
     invariant enc_storage_same_tag_1:
-      (verif && !enclave_dead && already_stored && kms_storage_tag_sync) ==>
+      (verif && !enclave_dead && phase != ph_pending &&
+        already_stored() && kms_storage_tag_sync()) ==>
         (valid_tag(cpu_1.tap_enclave_metadata_tag[eid]) ==>
           cpu_1.tap_storage_tag[eid][fresh] == cpu_1.tap_enclave_metadata_tag[eid]);
+    // The reference trace's stored ciphertext carries the tag the enclave is
+    // working with: after a load or a commit because they agree by construction,
+    // and inside the window because the store wrote both.  The bootstrap case is
+    // excluded: with nothing committed there is no load, so storage may still hold
+    // a ciphertext from a session that died before its first commit.
     invariant enc_storage_same_tag_2:
-      (verif && !enclave_dead && already_stored && (loaded || stored)) ==>
+      (verif && !enclave_dead && key_fetched &&
+        (phase == ph_pending || (phase == ph_active && already_stored()))) ==>
         cpu_2.tap_storage_tag[eid][fresh] == cpu_2.tap_enclave_metadata_tag[eid];
+
+    //=============================================================================//
+    // Content binding                                                             //
+    //                                                                             //
+    // A tag is a commitment to the ciphertext that carries it.  Everything the     //
+    // repaired model buys rests on these five invariants: they say that no         //
+    // reachable ciphertext -- written by the enclave, rolled back, replayed from    //
+    // the adversary's archive, or forged by tampering -- carries a tag that does    //
+    // not bind its own content.  Combined with injectivity of `digest`, equal tags  //
+    // therefore force equal ciphertexts, which is exactly what `loadPS` needs and   //
+    // what a counter-style tag cannot provide.                                      //
+    //=============================================================================//
+    invariant fresh_binds_1:
+      verif ==>
+        (cpu_1.tap_storage_mem[eid][fresh] == tag_mem(cpu_1.tap_storage_tag[eid][fresh]) &&
+          cpu_1.tap_storage_addr_valid[eid][fresh] == tag_valid_map(cpu_1.tap_storage_tag[eid][fresh]));
+    invariant fresh_binds_2:
+      verif ==>
+        (cpu_2.tap_storage_mem[eid][fresh] == tag_mem(cpu_2.tap_storage_tag[eid][fresh]) &&
+          cpu_2.tap_storage_addr_valid[eid][fresh] == tag_valid_map(cpu_2.tap_storage_tag[eid][fresh]));
+    invariant stale_binds_1:
+      verif ==>
+        (cpu_1.tap_storage_mem[eid][stale] == tag_mem(cpu_1.tap_storage_tag[eid][stale]) &&
+          cpu_1.tap_storage_addr_valid[eid][stale] == tag_valid_map(cpu_1.tap_storage_tag[eid][stale]));
+    invariant stale_binds_2:
+      verif ==>
+        (cpu_2.tap_storage_mem[eid][stale] == tag_mem(cpu_2.tap_storage_tag[eid][stale]) &&
+          cpu_2.tap_storage_addr_valid[eid][stale] == tag_valid_map(cpu_2.tap_storage_tag[eid][stale]));
+    // (The archive-binding invariant is gone: a replay installs `tag_mem(t)`, so
+    // `fresh_binds_1` holds by construction rather than by induction.)
+
+    //=============================================================================//
+    // Cross-trace agreement on tags                                               //
+    //                                                                             //
+    // The reference trace's KMS ledger is the ledger the attacked trace is trying  //
+    // to keep up with, so the two ledgers must agree: the adversary can stop a      //
+    // commit (by killing the enclave) but it cannot commit something of its own.    //
+    //=============================================================================//
+    invariant kms_tag_same:
+      verif ==> cpu_1.tap_kms_tag[eid] == cpu_2.tap_kms_tag[eid];
+    invariant enc_tag_same:
+      (verif && !enclave_dead && !enclave_abort) ==>
+        cpu_1.tap_enclave_metadata_tag[eid] == cpu_2.tap_enclave_metadata_tag[eid];
+    // Having fetched the tag, and before storing, the enclave's working tag is
+    // exactly the committed one.  Nothing an adversary can do moves the KMS tag,
+    // so this survives key tampering.
+    invariant synced_tag_1:
+      (verif && !enclave_dead && key_fetched && phase != ph_pending) ==>
+        cpu_1.tap_enclave_metadata_tag[eid] == cpu_1.tap_kms_tag[eid];
+    invariant synced_tag_2:
+      (verif && !enclave_dead && key_fetched && phase != ph_pending) ==>
+        cpu_2.tap_enclave_metadata_tag[eid] == cpu_2.tap_kms_tag[eid];
+    // In the window the enclave's tag chains directly from the committed tag.
+    // This is what makes the conditional append accept the commit; without it the
+    // KMS would be entitled to refuse, and the enclave to abort.
+    invariant pending_chains_1:
+      (verif && !enclave_dead && phase == ph_pending) ==>
+        tag_prev(cpu_1.tap_enclave_metadata_tag[eid]) == cpu_1.tap_kms_tag[eid];
+    invariant pending_chains_2:
+      (verif && !enclave_dead && phase == ph_pending) ==>
+        tag_prev(cpu_2.tap_enclave_metadata_tag[eid]) == cpu_2.tap_kms_tag[eid];
+    // The reference trace never has its key tampered with, so its working key is
+    // the KMS key from the moment it fetches it.
+    invariant enc_key_kms_2:
+      (verif && !enclave_dead && key_fetched) ==>
+        cpu_2.tap_enclave_metadata_key[eid] == cpu_2.tap_kms_key[eid];
+    invariant enc_key_valid_2:
+      (verif && !enclave_dead && key_fetched) ==>
+        valid_key(cpu_2.tap_enclave_metadata_key[eid]);
+    // The enclave holds a valid key from the moment it fetches one.  Deleting the
+    // KMS key afterwards does not take the enclave's copy away -- it only stops
+    // the next commit -- so this survives key tampering.
+    invariant enc_key_valid_1:
+      (verif && !enclave_dead && key_fetched) ==>
+        valid_key(cpu_1.tap_enclave_metadata_key[eid]);
+    // If the KMS key is intact and storage is encrypted under it, then the key the
+    // enclave is holding is that key.  The disjunction is what a key deletion or
+    // re-creation leaves behind: either the KMS has no key at all, or the stored
+    // ciphertext is under a key the KMS no longer has.  This is what lets an
+    // aborting commit be attributed to tampering.
+    invariant enc_key_kms_1:
+      (verif && !enclave_dead && key_fetched) ==>
+        (cpu_1.tap_enclave_metadata_key[eid] == cpu_1.tap_kms_key[eid] ||
+          kms_key_deleted() || !kms_storage_key_sync());
+    // In the window, the reference trace's `stale` slot is exactly the committed
+    // ciphertext.  This is what lets trace 2 discard an uncommitted write when the
+    // enclave dies: there is a well-formed committed ciphertext to go back to, and
+    // the rollback's own preconditions (same key, different tag) are met.
+    invariant pending_stale_2:
+      (verif && phase == ph_pending && already_stored()) ==>
+        (cpu_2.tap_storage_key[eid][stale] == cpu_2.tap_kms_key[eid] &&
+          cpu_2.tap_storage_tag[eid][stale] == cpu_2.tap_kms_tag[eid]);
+    // Before the enclave fetches from the KMS it has no tag, so nothing it could
+    // load would be accepted.
+    invariant enc_tag_null_1:
+      (verif && !key_fetched) ==>
+        (!valid_tag(cpu_1.tap_enclave_metadata_tag[eid]) &&
+          !valid_tag(cpu_2.tap_enclave_metadata_tag[eid]));
+    // Where the client key can be.  If the key the KMS currently holds appears
+    // anywhere the adversary can copy it from -- either storage slot, or its
+    // archive -- then the enclave is holding that same key.  `create_key` issues a
+    // key unrelated to every key already in the system, archives included, and no
+    // operation afterwards can reintroduce it: a store writes the key the enclave
+    // is holding, and rollback, replay and archive only move keys that are already
+    // there.  This is what lets an aborting commit be attributed to a key that the
+    // adversary deleted or replaced, rather than to the enclave getting out of step.
+    invariant client_key_1:
+      (verif && key_fetched && valid_key(cpu_1.tap_kms_key[eid])) ==>
+        ((cpu_1.tap_storage_key[eid][fresh] == cpu_1.tap_kms_key[eid] ||
+          cpu_1.tap_storage_key[eid][stale] == cpu_1.tap_kms_key[eid])
+          ==> cpu_1.tap_enclave_metadata_key[eid] == cpu_1.tap_kms_key[eid]);
+    // Same statement for the replay history.  Stated as a universal over tags
+    // rather than an existential in the antecedent, so that the solver gets a
+    // trigger on `produced[eid][t]`.
+    invariant client_key_produced_1:
+      (verif && key_fetched && valid_key(cpu_1.tap_kms_key[eid])) ==>
+        (forall (t : tag_t) ::
+          (cpu_1.tap_storage_produced[eid][t] &&
+            cpu_1.tap_storage_produced_key[eid][t] == cpu_1.tap_kms_key[eid])
+          ==> cpu_1.tap_enclave_metadata_key[eid] == cpu_1.tap_kms_key[eid]);
+    invariant enc_key_null_1:
+      (verif && !key_fetched) ==>
+        (!valid_key(cpu_1.tap_enclave_metadata_key[eid]) &&
+          !valid_key(cpu_2.tap_enclave_metadata_key[eid]));
 
     // If storage is tampered, the key or tag in storage is different from that in the enclave.
     // If the enclave is alive, the key in storage should be different from that in enclave.
     invariant kms_storage_key_unsync:
-      (verif && !kms_storage_key_sync) ==>
+      (verif && !kms_storage_key_sync()) ==>
         (valid_key(cpu_1.tap_kms_key[eid]) ==>
           cpu_1.tap_storage_key[eid][fresh] != cpu_1.tap_kms_key[eid]);
 
     invariant kms_storage_tag_unsync:
-      (verif && !kms_storage_tag_sync) ==>
+      (verif && !kms_storage_tag_sync()) ==>
         (valid_tag(cpu_1.tap_kms_tag[eid]) ==>
           cpu_1.tap_storage_tag[eid][fresh] != cpu_1.tap_kms_tag[eid]);
 
@@ -584,11 +755,29 @@ module integrity_proof {
     // Flags for operation scheduling                                              //
     //=============================================================================//
     // Limit possible (reachable) states
+    // Storage can only be in sync with a KMS tag that exists.  (The old form of
+    // this invariant also claimed that nothing is stored before the first commit,
+    // which the un-fused model makes false: `storePS` writes a ciphertext under
+    // the client key before any `updateTag` has ever succeeded.)
     invariant possible_states:
-      verif ==> (
-        (already_stored) ||
-        (!already_stored && !kms_storage_key_sync && !kms_storage_tag_sync)
-      );
+      verif ==> (kms_storage_tag_sync() ==> already_stored());
+
+    // The phase automaton agrees with the platform state it is meant to track.
+    invariant phase_dead_iff:
+      verif ==> ((phase == ph_dead) == enclave_dead);
+    invariant syncing_not_fetched_no_key:
+      (verif && !enclave_dead && !key_fetched) ==>
+        (phase == ph_syncing &&
+          !valid_key(cpu_1.tap_enclave_metadata_key[eid]) &&
+          !valid_key(cpu_2.tap_enclave_metadata_key[eid]));
+    // Nothing is pending unless the enclave has actually written a ciphertext.
+    invariant pending_implies_stored:
+      (verif && phase == ph_pending) ==> key_fetched;
+    // A bootstrapping enclave (nothing committed yet) is never in `ph_syncing`
+    // once it has its key: there is nothing to load.
+    invariant bootstrap_active:
+      (verif && !enclave_dead && !already_stored() && key_fetched) ==>
+        (phase == ph_active || phase == ph_pending);
 
     //=============================================================================//
     // Enclave death invariants                                                    //
@@ -606,10 +795,17 @@ module integrity_proof {
     invariant trace_2_no_abort: verif ==> !enclave_abort_2;
 
     invariant key_deleted_implies_invalid:
-      verif ==> (kms_key_deleted <==> !valid_key(cpu_1.tap_kms_key[eid]));
+      verif ==> (kms_key_deleted() <==> !valid_key(cpu_1.tap_kms_key[eid]));
 
-    invariant abort_implies_tamper:
-      verif ==> (enclave_abort ==> (kms_key_deleted || !kms_storage_key_sync || !kms_storage_tag_sync));
+    // NOTE: the old `abort_implies_tamper` invariant --
+    //   enclave_abort ==> (kms_key_deleted || !kms_storage_key_sync || !kms_storage_tag_sync)
+    // -- is false once storePS and updateTag are separate steps, and not merely
+    // unproven.  An enclave can abort for a perfectly untampered reason (it comes
+    // back from a crash, finds a ciphertext in storage whose tag the KMS has never
+    // committed, and halts), and the adversary can afterwards roll that ciphertext
+    // back so that storage and the KMS agree again.  The abort is sticky but its
+    // cause is not recoverable from the state, so no state predicate can witness
+    // it.  Nothing else in the proof depends on it.
 
     // Reset flags when enclave is dead
     // Enclave key and tag are null when dead
@@ -621,7 +817,7 @@ module integrity_proof {
         (cpu_2.tap_enclave_metadata_key[eid] == null_key_t && cpu_2.tap_enclave_metadata_tag[eid] == null_tag_t);
 
     invariant reset_flags_when_dead:
-      (verif && enclave_dead) ==> (!loaded && !stored);
+      (verif && enclave_dead) ==> !key_fetched;
 
     //=============================================================================//
     // Verification methods and solver options                                     //
