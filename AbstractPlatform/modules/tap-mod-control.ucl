@@ -36,6 +36,7 @@ module tap {
 
     tamper_storage_verif = verify(tamper_storage);
     rollback_storage_verif = verify(rollback_storage);
+    replay_storage_verif = verify(replay_storage);
 
     check;
     print_results;

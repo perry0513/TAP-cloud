@@ -24,13 +24,22 @@ procedure [noinline] tamper_storage (eid : tap_enclave_id_t)
             (tap_storage_key[eid][fresh] == null_key_t ||
              (tap_storage_key[eid][fresh] != tap_kms_key[eid] &&
               tap_storage_key[eid][fresh] != tap_enclave_metadata_key[eid]));
-  // Tag for encoding the data is different the tag stored in KMS
+  // The tag is neither a tag the enclave would accept now nor one it could
+  // reach by its next store.  (With chained tags "the next tag after t" is the
+  // whole family { chain(t, d) : d }, i.e. the tags whose predecessor is t.)
   ensures (status == enclave_op_success) ==>
-            (tap_storage_tag[eid][fresh] == null_tag_t ||
-             (tap_storage_tag[eid][fresh] != tap_kms_tag[eid] &&
-              tap_storage_tag[eid][fresh] != next_tag(tap_kms_tag[eid]) &&
-              tap_storage_tag[eid][fresh] != tap_enclave_metadata_tag[eid] &&
-              tap_storage_tag[eid][fresh] != next_tag(tap_enclave_metadata_tag[eid])));
+            (tap_storage_tag[eid][fresh] != tap_kms_tag[eid] &&
+             tag_prev(tap_storage_tag[eid][fresh]) != tap_kms_tag[eid] &&
+             tap_storage_tag[eid][fresh] != tap_enclave_metadata_tag[eid] &&
+             tag_prev(tap_storage_tag[eid][fresh]) != tap_enclave_metadata_tag[eid]);
+  // Whatever blob is written, its tag binds its content: a tag is carried
+  // inside the authenticated ciphertext, so no party -- adversary included --
+  // can present a tag/content pair that does not chain.  This costs the
+  // adversary nothing, since a blob under a non-client key is rejected by
+  // `_load_storage` on the key check regardless of its tag.
+  ensures (status == enclave_op_success) ==>
+            (tag_mem(tap_storage_tag[eid][fresh]) == tap_storage_mem[eid][fresh] &&
+              tag_valid_map(tap_storage_tag[eid][fresh]) == tap_storage_addr_valid[eid][fresh]);
   // All the rest of the data is unchanged
   ensures (status == enclave_op_success) ==>
             (tap_storage_mem[eid][stale] == old(tap_storage_mem)[eid][stale] &&
@@ -65,6 +74,7 @@ procedure [noinline] tamper_storage (eid : tap_enclave_id_t)
   var valid : [boolean]vaddr2bool_t;
   var key : [boolean]key_t;
   var tag : [boolean]tag_t;
+  var prev_tag : tag_t;
 
   status = enclave_op_success;
 
@@ -77,11 +87,14 @@ procedure [noinline] tamper_storage (eid : tap_enclave_id_t)
             (key[fresh] != tap_kms_key[eid] &&
               key[fresh] != tap_enclave_metadata_key[eid]));
 
-    assume (tag[fresh] == null_tag_t ||
-            (tag[fresh] != tap_kms_tag[eid] &&
-              tag[fresh] != next_tag(tap_kms_tag[eid]) &&
-              tag[fresh] != tap_enclave_metadata_tag[eid] &&
-              tag[fresh] != next_tag(tap_enclave_metadata_tag[eid])));
+    // The written blob is tagged consistently with its content, and with a tag
+    // that the enclave will not accept now nor after its next store.
+    havoc prev_tag;
+    tag[fresh] = chain(prev_tag, mem[fresh], valid[fresh]);
+    assume (tag[fresh] != tap_kms_tag[eid] &&
+            tag_prev(tag[fresh]) != tap_kms_tag[eid] &&
+            tag[fresh] != tap_enclave_metadata_tag[eid] &&
+            tag_prev(tag[fresh]) != tap_enclave_metadata_tag[eid]);
 
     mem[stale] = tap_storage_mem[eid][stale];
     valid[stale] = tap_storage_addr_valid[eid][stale];

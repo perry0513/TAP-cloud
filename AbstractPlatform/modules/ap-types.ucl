@@ -47,7 +47,7 @@ type mode_t = enum {
 //
 type tap_op_t = enum {
     Launch, Destroy, Enter, Exit, Resume, Pause, Snapshot, Clone, HavocMem, HavocPCRegs, HavocPT, Default,
-    StoreStorage, LoadStorage, TamperStorage, RollbackStorage, CreateKey, GetKeyAndTag, UpdateTag, DeleteKey, TransferKeyAndTag
+    StoreStorage, LoadStorage, TamperStorage, RollbackStorage, ReplayStorage, CreateKey, GetKeyAndTag, UpdateTag, DeleteKey, TransferKeyAndTag
 };
 
 //
@@ -106,6 +106,14 @@ type container_valid_t                     = [wap_addr_t]boolean;
 // storage
 type storage_mem_t                        = [vaddr_t]word_t;
 type vaddr2vaddr_t                        = [vaddr_t]vaddr_t;
+// The canonical "blank" ciphertext payload.  Addresses outside the stored set
+// are normalized to this value so that `digest` is a function of the data that
+// was actually stored and not of leftover values in the encoding buffer.
+const kzero_storage_mem_t : storage_mem_t;
+axiom (forall (v : vaddr_t) :: kzero_storage_mem_t[v] == k0_word_t);
+// The empty store filter: nothing has been written.
+const kempty_vaddr2bool_t : vaddr2bool_t;
+axiom (forall (v : vaddr_t) :: !kempty_vaddr2bool_t[v]);
 
 // New state for FAAS enclaves
 // type tap_enclave_metadata_is_snapshot_t    = [tap_enclave_id_t]boolean;
@@ -120,7 +128,57 @@ type tap_enclave_metadata_tag_t        = [tap_enclave_id_t]tag_t;
 // kms
 type tap_kms_key_t                     = [tap_enclave_id_t]key_t;
 type tap_kms_tag_t                     = [tap_enclave_id_t]tag_t;
-// define next_tag(t : tag_t) : tag_t = if (t + 1 == null_tag_t) then t+2 else t+1;
+// ---------------------------------------------------------------------------//
+// Freshness tags.                                                            //
+//                                                                            //
+// A tag is a *content-binding* commitment to the whole history of committed   //
+// states:  t_{i+1} = chain(t_i, m, av),  where (m, av) is the ciphertext just //
+// written.  This idealizes "hash the ciphertext and append the hash to the    //
+// ledger", which is what Nimble does, in the same style `measure.ucl` already //
+// idealizes the measurement hash.                                            //
+//                                                                            //
+// Collision resistance is stated by giving `chain` left inverses rather than  //
+// by an equality-antecedent axiom.  That form implies injectivity, and it     //
+// makes the consequence the proof actually needs -- equal tags carry equal    //
+// ciphertexts -- a matter of congruence rather than of quantifier             //
+// instantiation.                                                             //
+// ---------------------------------------------------------------------------//
+function chain     (t : tag_t, m : storage_mem_t, av : vaddr2bool_t) : tag_t;
+function tag_prev  (t : tag_t) : tag_t;
+function tag_mem   (t : tag_t) : storage_mem_t;
+function tag_valid_map (t : tag_t) : vaddr2bool_t;
+axiom (forall (t : tag_t, m : storage_mem_t, av : vaddr2bool_t) ::
+        tag_prev(chain(t, m, av)) == t);
+axiom (forall (t : tag_t, m : storage_mem_t, av : vaddr2bool_t) ::
+        tag_mem(chain(t, m, av)) == m);
+axiom (forall (t : tag_t, m : storage_mem_t, av : vaddr2bool_t) ::
+        tag_valid_map(chain(t, m, av)) == av);
+// A chained tag is never the null tag, so `valid_tag` distinguishes
+// "something has been committed" from "nothing has been committed".
+axiom (forall (t : tag_t, m : storage_mem_t, av : vaddr2bool_t) ::
+        chain(t, m, av) != null_tag_t);
+// A chained tag is never its own predecessor.  This follows from `rank`, but
+// stating it directly saves the solver an instantiation on a step it needs
+// constantly: the tag written by storePS differs from the committed tag.
+axiom (forall (t : tag_t, m : storage_mem_t, av : vaddr2bool_t) ::
+        chain(t, m, av) != t);
+// Empty persistent storage is the blank ciphertext, and the null tag binds it.
+// This makes "nothing has been committed yet" a case of content binding rather
+// than an exception to it.
+axiom tag_mem(null_tag_t) == kzero_storage_mem_t;
+axiom tag_valid_map(null_tag_t) == kempty_vaddr2bool_t;
+
+// `rank` supplies the freshness order.  First-order logic cannot state that the
+// chain is acyclic; `rank` does it finitely.
+function rank (t : tag_t) : integer;
+axiom rank(null_tag_t) == 0;
+axiom (forall (t : tag_t) :: rank(t) >= 0);
+axiom (forall (t : tag_t, m : storage_mem_t, av : vaddr2bool_t) ::
+        rank(chain(t, m, av)) == rank(t) + 1);
+
+// The counter-style tag of the previous model.  Retained only so that the
+// bounded attack witnesses can be re-run against the old scheme; no operation
+// in the model uses it any more.
 function next_tag(t : tag_t) : tag_t;
 axiom (forall (t : tag_t) :: next_tag(t) != t);
 axiom (forall (t : tag_t) :: next_tag(t) != null_tag_t);
@@ -189,6 +247,7 @@ type tap_proof_op_t = enum {
   tap_proof_op_load_storage,
   tap_proof_op_tamper_storage,
   tap_proof_op_rollback_storage,
+  tap_proof_op_replay_storage,
   tap_proof_op_create_key,
   tap_proof_op_get_key_and_tag,
   tap_proof_op_update_tag,

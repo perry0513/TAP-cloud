@@ -98,6 +98,15 @@ module tap {
   var tap_storage_key                       : tap_storage_key_t;
   var tap_storage_tag                       : tap_storage_tag_t;
 
+  // The write history the adversary may replay from.  Threat T2 lets the
+  // adversary write back any encrypted state the client enclave previously
+  // produced.  Because a tag binds its ciphertext, recording *which tags* were
+  // produced records the whole history: the content is recovered by projection,
+  // so no ciphertexts need to be stored.  The key is the one part a tag does not
+  // determine, so it is recorded alongside.
+  var tap_storage_produced                  : [tap_enclave_id_t][tag_t]boolean;
+  var tap_storage_produced_key              : [tap_enclave_id_t][tag_t]key_t;
+
   //
   // Helper Procedures
   //
@@ -629,6 +638,8 @@ module tap {
     modifies tap_storage_addr_valid;
     modifies tap_storage_key;
     modifies tap_storage_tag;
+    modifies tap_storage_produced;
+    modifies tap_storage_produced_key;
     modifies cpu_enclave_id;
     modifies cpu_addr_map;
     modifies cpu_addr_valid;
@@ -1191,6 +1202,8 @@ module tap {
     modifies tap_storage_addr_valid;
     modifies tap_storage_key;
     modifies tap_storage_tag;
+    modifies tap_storage_produced;
+    modifies tap_storage_produced_key;
     modifies tap_enclave_metadata_key;
     modifies tap_enclave_metadata_tag;
   {
@@ -1370,14 +1383,17 @@ module tap {
       call update_cpu_regs(rd, uf_cpu_result(cpu_pc, pc_op, l_data, r0, r1));
   }
 
+  // Kept in step with the copy in proofs/proof-common.ucl.  The KMS calls are
+  // now separate enclave instructions rather than being fused into storePS and
+  // loadPS, which is what puts the store/commit window inside the model.
   define tap_proof_op_valid_in_enclave(o : tap_proof_op_t) : boolean
   = (o == tap_proof_op_compute)   ||
     (o == tap_proof_op_pause)     ||
     // (o == tap_proof_op_snapshot)  ||
     (o == tap_proof_op_load_storage) ||
     (o == tap_proof_op_store_storage) ||
-    // (o == tap_proof_op_get_key_and_tag) ||
-    // (o == tap_proof_op_update_tag) ||
+    (o == tap_proof_op_get_key_and_tag) ||
+    (o == tap_proof_op_update_tag) ||
     (o == tap_proof_op_exit);
 
   //
@@ -1719,6 +1735,8 @@ module tap {
     modifies tap_kms_tag;
     modifies tap_storage_key;
     modifies tap_storage_tag;
+    modifies tap_storage_produced;
+    modifies tap_storage_produced_key;
     modifies tap_storage_mem;
     modifies tap_storage_addr_valid;
     modifies cpu_enclave_id;

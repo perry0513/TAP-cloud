@@ -36,6 +36,12 @@ procedure [noinline] create_key (eid : tap_enclave_id_t)
             (forall (e : tap_enclave_id_t) ::
               (forall (f : boolean) ::
                 (tap_kms_key[eid] != tap_storage_key[e][f])));
+  // ... including every key the enclave has ever encrypted with.  A fresh key is
+  // unrelated to everything that already exists, replay history included.
+  ensures (status == enclave_op_success) ==>
+            (forall (e : tap_enclave_id_t, t : tag_t) ::
+              tap_storage_produced[e][t] ==>
+                (tap_kms_key[eid] != tap_storage_produced_key[e][t]));
   // The rest of the keys stays the same
   ensures (status == enclave_op_success) ==>
             (forall (e : tap_enclave_id_t) ::
@@ -86,6 +92,8 @@ procedure [noinline] create_key (eid : tap_enclave_id_t)
     // Assume that the key is valid and unique
     havoc key;
     assume (valid_key(key) &&
+            (forall (e : tap_enclave_id_t, t : tag_t) ::
+              tap_storage_produced[e][t] ==> (key != tap_storage_produced_key[e][t])) &&
             (forall (e : tap_enclave_id_t) ::
               (forall (f : boolean) ::
                 (key != tap_kms_key[e] &&
@@ -342,10 +350,15 @@ procedure [noinline] update_tag ()
   //----------------------------------------------------------------------//
   // Success/failure conditions                                           //
   //----------------------------------------------------------------------//
+  // The KMS performs a *conditional* append: it accepts the new tag only if the
+  // tag it is replacing is the one the new tag was chained from.  This is the
+  // model of Nimble's conditional append, and it is what stops a commit from
+  // being grafted onto a ledger state the enclave never read.
   ensures(valid_enclave_id(cpu_enclave_id)            &&
            tap_enclave_metadata_valid[cpu_enclave_id] &&
            valid_key(tap_enclave_metadata_key[cpu_enclave_id]) &&
-           tap_enclave_metadata_key[cpu_enclave_id] == tap_kms_key[cpu_enclave_id])
+           tap_enclave_metadata_key[cpu_enclave_id] == tap_kms_key[cpu_enclave_id] &&
+           tag_prev(tap_enclave_metadata_tag[cpu_enclave_id]) == old(tap_kms_tag)[cpu_enclave_id])
             <==> (status == enclave_op_success);
 
   //----------------------------------------------------------------------//
@@ -369,7 +382,8 @@ procedure [noinline] update_tag ()
   ensures (valid_enclave_id(cpu_enclave_id)           &&
            tap_enclave_metadata_valid[cpu_enclave_id] &&
            valid_key(tap_enclave_metadata_key[cpu_enclave_id]) &&
-           tap_enclave_metadata_key[cpu_enclave_id] != tap_kms_key[cpu_enclave_id])
+           (tap_enclave_metadata_key[cpu_enclave_id] != tap_kms_key[cpu_enclave_id] ||
+             tag_prev(tap_enclave_metadata_tag[cpu_enclave_id]) != old(tap_kms_tag)[cpu_enclave_id]))
             <==> abort;
 
   //----------------------------------------------------------------------//
@@ -390,8 +404,11 @@ procedure [noinline] update_tag ()
   }
 
   if (status != enclave_op_failed) {
-    if (tap_enclave_metadata_key[eid] != tap_kms_key[eid]) {
-      // If the enclave's key does not match the KMS key, we abort the enclave
+    if (tap_enclave_metadata_key[eid] != tap_kms_key[eid] ||
+        tag_prev(tap_enclave_metadata_tag[eid]) != tap_kms_tag[eid]) {
+      // Either the enclave's key does not match the KMS key, or the KMS has
+      // moved on from the tag this commit was chained from.  Either way the
+      // enclave cannot safely continue, so it aborts.
       abort = true;
       status = enclave_op_failed;
     }
