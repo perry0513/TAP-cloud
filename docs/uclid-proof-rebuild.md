@@ -174,42 +174,63 @@ failure throughout, never as a pass.
 
 | proof | case splits | obligations | sat | unknown |
 |---|---|---|---|---|
-| `tap` module (CPU + operations) | -- | 6579 | 0 | 0 |
+| `tap` module (CPU + operations) | -- | 6130 | 0 | 0 |
 | Secure measurement | -- | 287 | 0 | 0 |
-| Generalized (reduced) integrity | 24 | 5968 | 0 | 0 |
-| Memory confidentiality | 24 | 5512 | 0 | 0 |
+| Generalized (reduced) integrity | 23 | 5728 | 0 | 0 |
+| Memory confidentiality | 23 | 5240 | 0 | 0 |
 
 The integrity case splits are the seven enclave instructions (`compute`, `exit`,
-`pause`, `storePS`, `loadPS`, `getKeyTag`, `updateTag`) and seventeen adversary
-operations, including the two new ones.
+`pause`, `storePS`, `loadPS`, `getKeyTag`, `updateTag`) and sixteen adversary
+operations, including `replayPS`.
 
 ## 10. Vacuity
 
-An operation that the scheduling assumptions make unreachable verifies for free.
-The two case splits for `getKeyTag` and `updateTag` in the previous version of
-this proof were exactly that, so the checks below matter.
+An operation that the scheduling assumptions make unreachable verifies for free,
+and a contradictory set of axioms or initial assumptions makes everything verify
+for free. The two case splits for `getKeyTag` and `updateTag` in the previous
+version of this proof were unreachable, so these checks matter.
 
-Probe: add `assert(false)` (with an optional extra assumption) to the proof's
-transition relation and regenerate. `unsat` would mean the situation is
-unreachable given the invariants.
+**Axioms and initial state.** `assert(false)` at the end of an init block. `unsat`
+would mean the init assumptions together with the global axioms are
+contradictory.
+
+| probe | result |
+|---|---|
+| integrity init (`integrity-proof-init.ucl`) | not refuted -- init satisfiable, axioms consistent |
+| confidentiality init (`mem-conf-proof-init.ucl`) | not refuted -- init satisfiable, axioms consistent |
+
+This is the check that the new axioms -- the `chain` projections, `rank`, and the
+null-tag bindings -- are consistent, and that adding them did not collapse the
+model.
+
+**Transition relation.** `assert(false)` (with an optional extra assumption) in
+the proof's `next` block.
 
 | probe | result |
 |---|---|
 | `enc-getkeytag`, `enc-store`, `enc-load`, `enc-updatetag` | reachable |
+| `adv-createkey` | reachable |
 | `adv-destroy` with `phase == ph_pending` | reachable |
 | `adv-rollback` with `phase == ph_pending` | reachable |
-| `adv-replay` with `phase == ph_pending && archive_def` | reachable |
+| `adv-replay` in the window, replaying the committed tag | reachable |
+| conf `e-getkeytag`, `e-updatetag`, `replay-storage` | reachable |
 
-The last three matter most: they say the store/commit window is genuinely
-reachable at a destroy, at a rollback, and at a replay -- so the crash-in-window
-scenarios really are being checked rather than assumed away.
+The window probes matter most: they say the store/commit window is genuinely
+reachable at a destroy, at a rollback, and at a replay, so the crash-in-window
+scenarios are being checked rather than assumed away.
+
+**Module procedures.** `assert(false)` on the success path of `_store_storage`,
+`update_tag` and `replay_storage`: no `unsat`, so none of those paths is
+provably unreachable and the procedure contracts are not vacuous.
 
 ## 11. Are content-binding tags load-bearing?
 
 `proofs/regression/` holds a variant in which `chain` depends only on its
 predecessor -- a counter, expressed in the current framework -- with the content
 projections and the five binding invariants removed. Everything else is
-identical.
+identical. (The variant was built against the single-slot archive that preceded
+the replay history of appendix A; it keeps that archive, since without content
+binding the history cannot be represented by tags alone.)
 
 - `enc-load` still passes (242 unsat). A load does not write storage, so nothing
   there needs the tag to bind content.
