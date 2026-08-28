@@ -78,6 +78,11 @@ module mem_confidentiality_proof {
     );
 
 
+    // The replay history starts out the same in both traces.  It is
+    // adversary-visible state, so it cannot be allowed to differ on the secret.
+    assume (cpu_2.tap_storage_produced     == cpu_1.tap_storage_produced &&
+            cpu_2.tap_storage_produced_key == cpu_1.tap_storage_produced_key);
+
     // Launch should not leave the PC in an untenable sitation
     assume !e_excl_map[cpu_1.cpu_addr_map[cpu_1.cpu_pc]];
 

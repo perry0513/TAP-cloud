@@ -730,6 +730,20 @@ module mem_confidentiality_proof {
                   (valid_enclave_id(e)) ==>
                     (cpu_1.tap_kms_tag[e] == cpu_2.tap_kms_tag[e]));
 
+    // The key and tag the enclave is working with are adversary-visible (they
+    // come from the KMS and go back to it), so they must agree across the two
+    // traces.  The fused storePS used to re-establish this on every store by
+    // fetching from the KMS; with the fetch a separate step it has to be carried
+    // as an invariant.
+    invariant metadata_key_same:
+      verif ==> (forall (e: tap_enclave_id_t) ::
+                  (valid_enclave_id(e)) ==>
+                    (cpu_1.tap_enclave_metadata_key[e] == cpu_2.tap_enclave_metadata_key[e]));
+    invariant metadata_tag_same:
+      verif ==> (forall (e: tap_enclave_id_t) ::
+                  (valid_enclave_id(e)) ==>
+                    (cpu_1.tap_enclave_metadata_tag[e] == cpu_2.tap_enclave_metadata_tag[e]));
+
     //-------------------------------------------------------------------//
     // Storage invariants                                                //
     //-------------------------------------------------------------------//
@@ -759,6 +773,15 @@ module mem_confidentiality_proof {
       verif ==> (forall (e: tap_enclave_id_t) ::
                   (valid_enclave_id(e)) ==>
                     (cpu_1.tap_storage_addr_valid[e] == cpu_2.tap_storage_addr_valid[e]));
+
+    // The replay history is adversary-visible, so it must not depend on the
+    // secret.  It is written only by storePS, which the two traces perform in
+    // lockstep with equal tags and equal keys, so the two histories stay equal.
+    invariant storage_produced_same:
+      verif ==> (forall (e: tap_enclave_id_t) ::
+                  (valid_enclave_id(e)) ==>
+                    (cpu_1.tap_storage_produced[e] == cpu_2.tap_storage_produced[e] &&
+                      cpu_1.tap_storage_produced_key[e] == cpu_2.tap_storage_produced_key[e]));
 
     //-------------------------------------------------------------------//
     // Axioms                                                            //
@@ -819,6 +842,25 @@ module mem_confidentiality_proof {
       assume (r_proof_op == tap_proof_op_tamper_storage) ==>
               ((cpu_1').tap_storage_addr_valid[r_eid][fresh] ==
                (cpu_2').tap_storage_addr_valid[r_eid][fresh]);
+
+      // The adversary replays the same previously produced ciphertext in both
+      // traces, exactly as it tampers identically in both.  Agreeing on the tag
+      // alone is not enough here: the two traces choose their replay tag
+      // independently, so one replay can fail while the other succeeds, and this
+      // proof carries no content-binding invariant to relate the untouched
+      // storage of the failing trace to the tag of the succeeding one.
+      assume (r_proof_op == tap_proof_op_replay_storage) ==>
+              ((cpu_1').tap_storage_mem[r_eid][fresh] ==
+               (cpu_2').tap_storage_mem[r_eid][fresh]);
+      assume (r_proof_op == tap_proof_op_replay_storage) ==>
+              ((cpu_1').tap_storage_addr_valid[r_eid][fresh] ==
+               (cpu_2').tap_storage_addr_valid[r_eid][fresh]);
+      assume (r_proof_op == tap_proof_op_replay_storage) ==>
+              ((cpu_1').tap_storage_key[r_eid][fresh] ==
+               (cpu_2').tap_storage_key[r_eid][fresh]);
+      assume (r_proof_op == tap_proof_op_replay_storage) ==>
+              ((cpu_1').tap_storage_tag[r_eid][fresh] ==
+               (cpu_2').tap_storage_tag[r_eid][fresh]);
 
       // If the client enclave stores to storage, the storage must be stored the same way
       assume (e_proof_op == tap_proof_op_store_storage) ==>
