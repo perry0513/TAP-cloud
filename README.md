@@ -15,6 +15,15 @@ To run the proof, you need to have the following installed:
 
 Check out the repositories for installation instructions.
 
+The model gives the KMS calls their own steps, so `storePS` and `updateTag` are
+no longer a single atomic operation and the window between them is part of the
+model. Freshness tags commit to the *content* of the stored state rather than to
+its position in the sequence, the KMS commit is a conditional append, and the
+adversary has an explicit archive it can replay a previously observed ciphertext
+from. `AbstractPlatform/proofs/regression/` holds a variant of the model in
+which tags certify position only; it is there to show which obligations the
+content-binding tags are actually carrying.
+
 The proof consists of four parts. Below are the commands to run each part:
 1. To run procedural verification for each operation (procedure) in the formal model:
    ```bash
@@ -35,6 +44,9 @@ The proof consists of four parts. Below are the commands to run each part:
     make integrity-case-split       # Checks the original operations in TAP
     make integrity-case-split-new   # Checks the new operations introduced by STAP
     ```
+    `integrity-case-split-new` covers the granular KMS calls (`getKeyTag`,
+    `updateTag`) and the two operations that give the adversary its replay
+    archive (`archiveStorage`, `replayStorage`) alongside the storage operations.
 
 4. To run the confidentiality proof:
     ```bash
