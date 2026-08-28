@@ -1,0 +1,809 @@
+module integrity_proof {
+    //----------------------------------------------------------------------//
+    // Import statements                                                    //
+    //----------------------------------------------------------------------//
+
+    type * = proof_common.*;
+    const * = proof_common.*;
+    function * = proof_common.*;
+    define * = proof_common.*;
+
+    //----------------------------------------------------------------------//
+    // Proof state variables                                                //
+    //----------------------------------------------------------------------//
+    // Whether we should verify or not
+    // NOTE: Used in the init block to avoid verifying initial states.
+    //       Purpose is to avoid verifying all operations at the same time.
+    var verif: boolean;
+
+    var e_addr_valid                                  : addr_valid_t;
+    var e_addr_map                                    : addr_map_t;
+    var e_excl_vaddr                                  : excl_vaddr_t;
+    var e_excl_map                                    : excl_map_t;
+    var e_root_excl_map                               : excl_map_t;
+    var e_container_data                              : container_data_t;
+    var e_entrypoint                                  : vaddr_t;
+
+    var eid, r_eid, r_parent_eid                      : tap_enclave_id_t;
+    var status, status_1, status_2                    : enclave_op_result_t; // only used in enclave mode
+    var e_proof_op, r_proof_op                        : tap_proof_op_t;
+    var r_regs                                        : regs_t;
+    var current_mode, current_mode_1, current_mode_2  : mode_t;
+    var enclave_dead, enclave_dead_1, enclave_dead_2  : boolean;
+    var iter                                          : integer;
+
+    var enclave_abort, enclave_abort_1, enclave_abort_2          : boolean;
+    var kms_tampered, kms_tampered_1, kms_tampered_2             : boolean;
+    var storage_tampered, storage_tampered_1, storage_tampered_2 : boolean;
+    var storage_rolledback, storage_rolledback_1, storage_rolledback_2 : boolean;
+
+    // Where the enclave has got to in its program.  See `phase_t` in
+    // proof-common.ucl; the scheduling assumptions in integrity-proof-next.ucl
+    // are what make this an automaton rather than a decoration.
+    var phase                 : phase_t;
+    var key_fetched           : boolean;
+    // Scratch for the reference trace's discard at a destroy (see
+    // integrity-proof-next.ucl).
+    var discard_status        : enclave_op_result_t;
+
+
+
+    instance cpu_1: tap(tap_r_eid: (r_eid),
+                        tap_r_parent_eid: (r_parent_eid),
+                        tap_eid: (eid),
+                        tap_r_proof_op: (r_proof_op),
+                        tap_e_proof_op: (e_proof_op),
+                        tap_r_regs: (r_regs),
+                        tap_iter: (iter),
+                        tap_op_status: (status_1),
+                        tap_e_addr_valid: (e_addr_valid),
+                        tap_e_addr_map: (e_addr_map),
+                        tap_e_excl_vaddr: (e_excl_vaddr),
+                        tap_e_excl_map: (e_excl_map),
+                        tap_e_container_data: (e_container_data),
+                        tap_e_entrypoint: (e_entrypoint),
+                        tap_current_mode: (current_mode_1),
+                        tap_enclave_dead: (enclave_dead_1),
+                        tap_enclave_abort: (enclave_abort_1),
+                        tap_kms_tampered: (kms_tampered_1),
+                        tap_storage_tampered: (storage_tampered_1),
+                        tap_storage_rolledback: (storage_rolledback_1));
+
+    instance cpu_2: tap(tap_r_eid: (r_eid),
+                        tap_r_parent_eid: (r_parent_eid),
+                        tap_eid: (eid),
+                        tap_r_proof_op: (r_proof_op),
+                        tap_e_proof_op: (e_proof_op),
+                        tap_r_regs: (r_regs),
+                        tap_iter: (iter),
+                        tap_op_status: (status_2),
+                        tap_e_addr_valid: (e_addr_valid),
+                        tap_e_addr_map: (e_addr_map),
+                        tap_e_excl_vaddr: (e_excl_vaddr),
+                        tap_e_excl_map: (e_excl_map),
+                        tap_e_container_data: (e_container_data),
+                        tap_e_entrypoint: (e_entrypoint),
+                        tap_current_mode: (current_mode_2),
+                        tap_enclave_dead: (enclave_dead_2),
+                        tap_enclave_abort: (enclave_abort_2),
+                        tap_kms_tampered: (kms_tampered_2),
+                        tap_storage_tampered: (storage_tampered_2),
+                        tap_storage_rolledback: (storage_rolledback_2));
+
+    //----------------------------------------------------------------------//
+    // Helpers                                                              //
+    //----------------------------------------------------------------------//
+    define tap_metadata_equal(e: tap_enclave_id_t): boolean =
+      (cpu_1.tap_enclave_metadata_valid[e]         == cpu_2.tap_enclave_metadata_valid[e]) &&
+      (cpu_1.tap_enclave_metadata_addr_excl[e]     == cpu_2.tap_enclave_metadata_addr_excl[e]) &&
+      (forall (va: vaddr_t) ::
+        (cpu_1.tap_enclave_metadata_addr_excl[e][va] ==>
+          ((cpu_1.tap_enclave_metadata_addr_valid[e][va]    == cpu_2.tap_enclave_metadata_addr_valid[e][va]) &&
+           (cpu_1.tap_enclave_metadata_addr_map[e][va]      == cpu_2.tap_enclave_metadata_addr_map[e][va])))) &&
+      (cpu_1.tap_enclave_metadata_entrypoint[e]    == cpu_2.tap_enclave_metadata_entrypoint[e]) &&
+      (cpu_1.tap_enclave_metadata_pc[e]            == cpu_2.tap_enclave_metadata_pc[e]) &&
+      (cpu_1.tap_enclave_metadata_regs[e]          == cpu_2.tap_enclave_metadata_regs[e]) &&
+      (cpu_1.tap_enclave_metadata_paused[e]        == cpu_2.tap_enclave_metadata_paused[e]); // &&
+      // (cpu_1.tap_enclave_metadata_is_snapshot[e]   == cpu_2.tap_enclave_metadata_is_snapshot[e]) &&
+      // (cpu_1.tap_enclave_metadata_child_count[e] > 0   <==> cpu_2.tap_enclave_metadata_child_count[e] > 0) &&
+      // (cpu_1.tap_enclave_metadata_root_snapshot[e] == cpu_2.tap_enclave_metadata_root_snapshot[e]) &&
+      // (cpu_1.tap_enclave_metadata_wap_addr_free[e] == cpu_2.tap_enclave_metadata_wap_addr_free[e]);
+
+    // The four predicates below used to be ghost flags updated by hand at each
+    // operation.  They are pure functions of trace 1's state, so they are macros
+    // instead: splitting storePS from updateTag moves the point at which storage
+    // and the KMS agree, and hand-maintained flags are exactly what goes stale
+    // when that happens.
+    define already_stored() : boolean =
+      valid_tag(cpu_1.tap_kms_tag[eid]);
+    define kms_key_deleted() : boolean =
+      !valid_key(cpu_1.tap_kms_key[eid]);
+    define kms_storage_key_sync() : boolean =
+      (valid_key(cpu_1.tap_kms_key[eid]) &&
+        cpu_1.tap_storage_key[eid][fresh] == cpu_1.tap_kms_key[eid]);
+    // Guards for the phase automaton in integrity-proof-next.ucl.  They take the
+    // post-state values as arguments because a `define` cannot mention primed
+    // variables directly.
+    define enc_step_ok(st : enclave_op_result_t, ab : boolean, m : mode_t) : boolean =
+      (m == mode_enclave && st == enclave_op_success && !ab);
+    define adv_step_ok(st : enclave_op_result_t, m : mode_t, re : tap_enclave_id_t, e : tap_enclave_id_t) : boolean =
+      (m == mode_untrusted && re == e && st == enclave_op_success);
+
+    define kms_storage_tag_sync() : boolean =
+      (valid_tag(cpu_1.tap_kms_tag[eid]) &&
+        cpu_1.tap_storage_tag[eid][fresh] == cpu_1.tap_kms_tag[eid]);
+
+    //----------------------------------------------------------------------//
+    // TAP invariants                                                       //
+    //----------------------------------------------------------------------//
+
+    // Invalid enclaves cannot own memory
+    invariant inv1: verif ==>  (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
+                (valid_enclave_id(e) && !cpu_1.tap_enclave_metadata_valid[e]) ==>
+                    (cpu_1.cpu_owner_map[pa] != e));
+    invariant inv2: verif ==>  (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
+                (valid_enclave_id(e) && !cpu_2.tap_enclave_metadata_valid[e]) ==>
+                    (cpu_2.cpu_owner_map[pa] != e));
+
+    // Free memory is owned by the respective enclave
+    // invariant inv3: verif ==> (forall (pa: wap_addr_t, e : tap_enclave_id_t) ::
+    //             cpu_1.tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_1.cpu_owner_map[pa] == e);
+    // invariant inv4: verif ==> (forall (pa: wap_addr_t, e : tap_enclave_id_t) ::
+    //             cpu_2.tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_2.cpu_owner_map[pa] == e);
+
+    // Child count is non-negative
+    // invariant inv5: verif ==> (forall (e: tap_enclave_id_t) :: cpu_1.tap_enclave_metadata_child_count[e] >= 0);
+    // invariant inv6: verif ==> (forall (e: tap_enclave_id_t) :: cpu_2.tap_enclave_metadata_child_count[e] >= 0);
+
+    // Eid is valid
+    invariant inv7: verif ==> valid_enclave_id(eid);
+    invariant inv8: (verif && !enclave_dead) ==>
+                (cpu_1.tap_enclave_metadata_valid[eid] && cpu_2.tap_enclave_metadata_valid[eid]);
+
+    // `cpu_enclave_id` is never blocked_enclave_id
+    invariant inv9: verif ==> (cpu_1.cpu_enclave_id != tap_blocked_enc_id);
+    invariant inv10: verif ==> (cpu_2.cpu_enclave_id != tap_blocked_enc_id);
+
+    // The entrypoint always has an executable vaddr -> paddr mapping.
+    invariant inv11: (verif && !enclave_dead) ==>
+                tap_addr_perm_x(cpu_1.tap_enclave_metadata_addr_valid[eid][cpu_1.tap_enclave_metadata_entrypoint[eid]]);
+    invariant inv12: (verif && !enclave_dead) ==>
+                tap_addr_perm_x(cpu_2.tap_enclave_metadata_addr_valid[eid][cpu_2.tap_enclave_metadata_entrypoint[eid]]);
+    invariant inv13: (verif && !enclave_dead) ==>
+                cpu_1.tap_enclave_metadata_addr_excl[eid][cpu_1.tap_enclave_metadata_entrypoint[eid]];
+    invariant inv14: (verif && !enclave_dead) ==>
+                cpu_2.tap_enclave_metadata_addr_excl[eid][cpu_2.tap_enclave_metadata_entrypoint[eid]];
+
+    // The pc always has an executable vaddr -> paddr mapping.
+    invariant inv15: (verif && !enclave_dead) ==>
+                tap_addr_perm_x(cpu_1.tap_enclave_metadata_addr_valid[eid][cpu_1.tap_enclave_metadata_pc[eid]]);
+    invariant inv16: (verif && !enclave_dead) ==>
+                tap_addr_perm_x(cpu_2.tap_enclave_metadata_addr_valid[eid][cpu_2.tap_enclave_metadata_pc[eid]]);
+    invariant inv17: (verif && !enclave_dead) ==>
+                cpu_1.tap_enclave_metadata_addr_excl[eid][cpu_1.tap_enclave_metadata_pc[eid]];
+    invariant inv18: (verif && !enclave_dead) ==>
+                cpu_2.tap_enclave_metadata_addr_excl[eid][cpu_2.tap_enclave_metadata_pc[eid]];
+
+    // The cpu_owner_map and enclave's excl_map are consistent
+    // invariant inv19: (verif && !enclave_dead) ==>
+    //                     (cpu_1.tap_enclave_metadata_wap_addr_free[eid] == cpu_2.tap_enclave_metadata_wap_addr_free[eid]);
+    invariant inv20: (verif && !enclave_dead) ==>
+                        (forall (pa: wap_addr_t) ::
+                          (cpu_1.cpu_owner_map[pa] == eid <==> e_excl_map[pa]));
+    invariant inv21: (verif && !enclave_dead) ==>
+                        (forall (pa: wap_addr_t) ::
+                          (cpu_2.cpu_owner_map[pa] == eid <==> e_excl_map[pa]));
+    // invariant inv20_root: (verif && !enclave_dead && valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid])) ==>
+    //                     (forall (pa: wap_addr_t) ::
+    //                       ((cpu_1.cpu_owner_map[pa] == cpu_1.tap_enclave_metadata_root_snapshot[eid]) <==> e_root_excl_map[pa]));
+    // invariant inv21_root: (verif && !enclave_dead && valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[eid])) ==>
+    //                     (forall (pa: wap_addr_t) ::
+    //                       ((cpu_2.cpu_owner_map[pa] == cpu_2.tap_enclave_metadata_root_snapshot[eid]) <==> e_root_excl_map[pa]));
+
+    invariant inv22: (verif && !enclave_dead) ==>
+                 (cpu_1.tap_enclave_metadata_addr_excl[eid] == cpu_2.tap_enclave_metadata_addr_excl[eid]);
+
+    // Permission bits are the same.
+    invariant inv26: (verif && !enclave_dead && !enclave_abort) ==>
+      (forall (va: vaddr_t) ::
+        (cpu_1.tap_enclave_metadata_addr_excl[eid][va] ==>
+          cpu_1.tap_enclave_metadata_addr_valid[eid][va] == cpu_2.tap_enclave_metadata_addr_valid[eid][va]));
+
+    // The two VA -> PA maps are equal for `eid`
+    invariant inv27: (verif && !enclave_dead) ==>
+      (forall (va: vaddr_t) ::
+        (cpu_1.tap_enclave_metadata_addr_excl[eid][va] ==>
+          cpu_1.tap_enclave_metadata_addr_map[eid][va] == cpu_2.tap_enclave_metadata_addr_map[eid][va]));
+
+    // If an address is exclusive, it is the same for both enclaves.
+    invariant inv31: (verif && !enclave_dead) ==>
+                        (forall (pa : wap_addr_t) ::
+                          e_excl_map[pa] ==> (cpu_1.cpu_mem[pa] == cpu_2.cpu_mem[pa]));
+
+    // The two PCs for `eid` are the same in the metadata
+    invariant inv32: (verif && !enclave_dead) ==>
+                (cpu_1.tap_enclave_metadata_pc[eid] == cpu_2.tap_enclave_metadata_pc[eid]);
+
+    // The two entrypoints for `eid` are the same in the metadata
+    invariant inv33: (verif && !enclave_dead) ==>
+                (cpu_1.tap_enclave_metadata_entrypoint[eid] == cpu_2.tap_enclave_metadata_entrypoint[eid]);
+
+    // The two enclaves for `eid` are paused in the same way in the metadata
+    invariant inv34: (verif && !enclave_dead) ==>
+                (cpu_1.tap_enclave_metadata_paused[eid] == cpu_2.tap_enclave_metadata_paused[eid]);
+    // invariant inv35: (verif && !enclave_dead) ==>
+    //             (cpu_1.tap_enclave_metadata_is_snapshot[eid] == cpu_2.tap_enclave_metadata_is_snapshot[eid]);
+
+    // The two registers for `eid` are the same in the metadata
+    invariant inv36:
+      (verif && !enclave_dead) ==>
+        (cpu_1.tap_enclave_metadata_regs[eid] == cpu_2.tap_enclave_metadata_regs[eid]);
+
+    // Invariant about the states of the CPUs.
+    // are we in attacker mode?
+    invariant inv37: verif ==> (current_mode == mode_untrusted) ==> (cpu_1.cpu_enclave_id != eid);
+    invariant inv38: verif ==> (current_mode == mode_untrusted) ==> (cpu_2.cpu_enclave_id == tap_null_enc_id);
+
+    // if we are in trusted mode, we mean our enclave.
+    invariant inv39: verif ==> (current_mode == mode_enclave ==>
+                (cpu_1.cpu_enclave_id == eid  && cpu_2.cpu_enclave_id == eid));
+    invariant mode_enclave_implies_not_dead: verif ==> (current_mode == mode_enclave ==> !enclave_dead);
+
+    // The CPU state is also the same in trusted mode.
+    invariant inv42: verif ==> (current_mode == mode_enclave ==> cpu_1.cpu_pc == cpu_2.cpu_pc);
+    invariant inv43: verif ==> (current_mode == mode_enclave ==> tap_addr_perm_x(cpu_1.cpu_addr_valid[cpu_1.cpu_pc]));
+    invariant inv44: verif ==> (current_mode == mode_enclave ==> tap_addr_perm_x(cpu_2.cpu_addr_valid[cpu_2.cpu_pc]));
+    invariant inv45: verif ==> (current_mode == mode_enclave ==> cpu_1.tap_enclave_metadata_addr_excl[eid][cpu_1.cpu_pc]);
+    invariant inv46: verif ==> (current_mode == mode_enclave ==> cpu_2.tap_enclave_metadata_addr_excl[eid][cpu_2.cpu_pc]);
+    invariant inv47: verif ==> (current_mode == mode_enclave ==>
+        (cpu_1.cpu_owner_map[cpu_1.cpu_addr_map[cpu_1.cpu_pc]] == eid)); // ||
+        //  cpu_1.cpu_owner_map[cpu_1.cpu_addr_map[cpu_1.cpu_pc]] == cpu_1.tap_enclave_metadata_root_snapshot[eid]));
+    invariant inv48: verif ==> (current_mode == mode_enclave ==>
+        (cpu_2.cpu_owner_map[cpu_2.cpu_addr_map[cpu_2.cpu_pc]] == eid)); // ||
+        //  cpu_2.cpu_owner_map[cpu_2.cpu_addr_map[cpu_2.cpu_pc]] == cpu_2.tap_enclave_metadata_root_snapshot[eid]));
+
+    // If we are in trusted mode, then metadata and CPU state are the same.
+    invariant inv49:
+      verif ==>
+        ((current_mode == mode_enclave) ==>
+          (cpu_1.cpu_regs == cpu_2.cpu_regs));
+
+    // This states that the two traces update addr_valid in the same way.
+    invariant inv50: (verif && !enclave_abort) ==> (forall (va : vaddr_t) ::
+                (current_mode == mode_enclave && cpu_1.tap_enclave_metadata_addr_excl[eid][va]) ==>
+                    (cpu_1.cpu_addr_valid[va] == cpu_2.cpu_addr_valid[va]));
+
+    // But note cpu_addr_valid may differ from the tap_enclave_metadata_addr_valid because
+    // the accessed bit is set in the form.
+    invariant inv51: verif ==> (forall (va : vaddr_t) ::
+                (current_mode == mode_enclave) ==>
+                    tap_addr_perm_eq(cpu_1.tap_enclave_metadata_addr_valid[eid][va], cpu_1.cpu_addr_valid[va]));
+    invariant inv52: verif ==> (forall (va : vaddr_t) ::
+                (current_mode == mode_enclave) ==>
+                    tap_addr_perm_eq(cpu_2.tap_enclave_metadata_addr_valid[eid][va], cpu_2.cpu_addr_valid[va]));
+
+    // When running the enclave, exclusive VA is mapped to the same PA between traces
+    invariant inv53: verif ==>
+      (forall (va : vaddr_t) ::
+        (current_mode == mode_enclave && cpu_1.tap_enclave_metadata_addr_excl[eid][va]) ==>
+          (cpu_1.cpu_addr_map[va] == cpu_2.cpu_addr_map[va]));
+
+    // Inputs are the same between traces
+    invariant inv_same_tap_r_eid: verif ==> (r_eid == cpu_1.tap_r_eid && cpu_1.tap_r_eid == cpu_2.tap_r_eid);
+    invariant inv_same_tap_eid: verif ==> (eid == cpu_1.tap_eid && cpu_1.tap_eid == cpu_2.tap_eid);
+    invariant inv_same_tap_r_proof_op: verif ==> (r_proof_op == cpu_1.tap_r_proof_op && cpu_1.tap_r_proof_op == cpu_2.tap_r_proof_op);
+    invariant inv_same_tap_e_proof_op: verif ==> (e_proof_op == cpu_1.tap_e_proof_op && cpu_1.tap_e_proof_op == cpu_2.tap_e_proof_op);
+    invariant inv_same_tap_r_regs: verif ==> (r_regs == cpu_1.tap_r_regs && cpu_1.tap_r_regs == cpu_2.tap_r_regs);
+    invariant inv_same_tap_ter: verif ==> (iter == cpu_1.tap_iter && cpu_1.tap_iter == cpu_2.tap_iter);
+
+    // Outputs are the same between traces
+    invariant inv_same_trusted_mode:
+      (verif && !enclave_dead) ==>
+        (cpu_1.tap_current_mode == cpu_2.tap_current_mode && cpu_1.tap_current_mode == current_mode);
+    invariant inv_same_enc_not_dead:
+      (verif && !enclave_dead) ==>
+        (enclave_dead == cpu_2.tap_enclave_dead && cpu_1.tap_enclave_dead == enclave_dead);
+
+    //----------------------------------------------------------------------//
+    // Cerberus invariants                                                  //
+    //----------------------------------------------------------------------//
+
+    // No one can run a snapshot enclave
+    // invariant cpu_never_snapshot: (!enclave_dead && verif) ==>
+    //   (!cpu_1.tap_enclave_metadata_is_snapshot[cpu_1.cpu_enclave_id] &&
+    //    !cpu_2.tap_enclave_metadata_is_snapshot[cpu_2.cpu_enclave_id]);
+
+    // Null enclave is never a snapshot
+    // invariant null_enc_never_snapshot: (verif) ==>
+    //   (!cpu_1.tap_enclave_metadata_is_snapshot[tap_null_enc_id] &&
+    //    !cpu_2.tap_enclave_metadata_is_snapshot[tap_null_enc_id]);
+
+    // Root snapshot stays the same
+    // invariant eid_root_equal: (!enclave_dead && verif) ==>
+    //   ((valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid]) && cpu_1.tap_enclave_metadata_valid[cpu_1.tap_enclave_metadata_root_snapshot[eid]]) ==>
+    //     tap_metadata_equal(cpu_1.tap_enclave_metadata_root_snapshot[eid]));
+
+    // If the enclave root snapshot is valid, then it's a snapshot
+    // invariant eid_root_is_snapshot: (!enclave_dead && verif) ==>
+    //   (valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid]) ==>
+    //     cpu_1.tap_enclave_metadata_is_snapshot[cpu_1.tap_enclave_metadata_root_snapshot[eid]]);
+
+    // Root snapshot memory stays the same
+    // invariant eid_root_mem_equal:
+    //   (!enclave_dead && verif && valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid])) ==>
+    //     (forall (pa: wap_addr_t) ::
+    //       (e_root_excl_map[pa] ==>
+    //         (cpu_1.cpu_mem[pa] == cpu_2.cpu_mem[pa])));
+
+    // Same Cerberus metadata
+    // invariant inv_same_is_snapshot:   (!enclave_dead && verif) ==> cpu_1.tap_enclave_metadata_is_snapshot[eid] == cpu_2.tap_enclave_metadata_is_snapshot[eid];
+    // invariant inv_same_root_snapshot: (!enclave_dead && verif) ==> cpu_1.tap_enclave_metadata_root_snapshot[eid] == cpu_2.tap_enclave_metadata_root_snapshot[eid];
+    // invariant inv_same_wap_addr_free: (!enclave_dead && verif) ==> cpu_1.tap_enclave_metadata_wap_addr_free[eid] == cpu_2.tap_enclave_metadata_wap_addr_free[eid];
+
+    // If an enclave is valid, then the root is not itself
+    // invariant inv_root_not_self_1: (!enclave_dead && verif) ==> (forall (e : tap_enclave_id_t) :: valid_enclave_id(e) ==> cpu_1.tap_enclave_metadata_root_snapshot[e] != e);
+    // invariant inv_root_not_self_2: (!enclave_dead && verif) ==> (forall (e : tap_enclave_id_t) :: valid_enclave_id(e) ==> cpu_2.tap_enclave_metadata_root_snapshot[e] != e);
+
+    invariant b1: (!enclave_dead && verif) ==> (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
+                (valid_enclave_id(e) && !cpu_1.tap_enclave_metadata_valid[e]) ==>
+                    (cpu_1.cpu_owner_map[pa] != e));
+    invariant b2: (!enclave_dead && verif) ==> (forall (pa : wap_addr_t, e : tap_enclave_id_t) ::
+                (valid_enclave_id(e) && !cpu_2.tap_enclave_metadata_valid[e]) ==>
+                    (cpu_2.cpu_owner_map[pa] != e));
+
+    // invariant b3: (!enclave_dead && verif) ==> (forall (pa: wap_addr_t, e : tap_enclave_id_t) ::
+    //             cpu_1.tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_1.cpu_owner_map[pa] == e);
+    // invariant b4: (!enclave_dead && verif) ==> (forall (pa: wap_addr_t, e : tap_enclave_id_t) ::
+    //             cpu_2.tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_2.cpu_owner_map[pa] == e);
+
+    // invariant b5: (!enclave_dead && verif) ==> (forall (e: tap_enclave_id_t) :: cpu_1.tap_enclave_metadata_child_count[e] >= 0);
+    // invariant b6: (!enclave_dead && verif) ==> (forall (e: tap_enclave_id_t) :: cpu_2.tap_enclave_metadata_child_count[e] >= 0);
+
+    // The metadata entrypoints and cpus are owned by the eid itself
+    invariant cpu_pc_owned_metadata_1: (!enclave_dead && verif) ==>
+      (cpu_1.cpu_owner_map[cpu_1.tap_enclave_metadata_addr_map[eid][cpu_1.tap_enclave_metadata_pc[eid]]] == eid); // ||
+        // (valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid]) && cpu_1.tap_enclave_metadata_valid[cpu_1.tap_enclave_metadata_root_snapshot[eid]] && cpu_1.cpu_owner_map[cpu_1.tap_enclave_metadata_addr_map[eid][cpu_1.tap_enclave_metadata_pc[eid]]] == cpu_1.tap_enclave_metadata_root_snapshot[eid]));
+    invariant cpu_pc_owned_metadata_2: (!enclave_dead && verif) ==>
+      (cpu_2.cpu_owner_map[cpu_2.tap_enclave_metadata_addr_map[eid][cpu_2.tap_enclave_metadata_pc[eid]]] == eid); // ||
+        // (valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[eid]) && cpu_2.tap_enclave_metadata_valid[cpu_2.tap_enclave_metadata_root_snapshot[eid]] && cpu_2.cpu_owner_map[cpu_2.tap_enclave_metadata_addr_map[eid][cpu_2.tap_enclave_metadata_pc[eid]]] == cpu_2.tap_enclave_metadata_root_snapshot[eid]));
+    invariant cpu_entrypoint_owned_metadata_1: (!enclave_dead && verif) ==>
+      (cpu_1.cpu_owner_map[cpu_1.tap_enclave_metadata_addr_map[eid][cpu_1.tap_enclave_metadata_entrypoint[eid]]] == eid); // ||
+        // (valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid]) && cpu_1.tap_enclave_metadata_valid[cpu_1.tap_enclave_metadata_root_snapshot[eid]] && cpu_1.cpu_owner_map[cpu_1.tap_enclave_metadata_addr_map[eid][cpu_1.tap_enclave_metadata_entrypoint[eid]]] == cpu_1.tap_enclave_metadata_root_snapshot[eid]));
+    invariant cpu_entrypoint_owned_metadata_2: (!enclave_dead && verif) ==>
+      (cpu_2.cpu_owner_map[cpu_2.tap_enclave_metadata_addr_map[eid][cpu_2.tap_enclave_metadata_entrypoint[eid]]] == eid); // ||
+        // (valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[eid]) && cpu_2.tap_enclave_metadata_valid[cpu_2.tap_enclave_metadata_root_snapshot[eid]] && cpu_2.cpu_owner_map[cpu_2.tap_enclave_metadata_addr_map[eid][cpu_2.tap_enclave_metadata_entrypoint[eid]]] == cpu_2.tap_enclave_metadata_root_snapshot[eid]));
+
+    // When the CPU is running the enclave `eid`, the pc is owned by `eid` or the root snapshot
+    invariant cpu_pc_owned_1: (!enclave_dead && verif && cpu_1.cpu_enclave_id == eid) ==>
+      (cpu_1.cpu_owner_map[cpu_1.cpu_addr_map[cpu_1.cpu_pc]] == eid); // ||
+      //  (valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[cpu_1.cpu_enclave_id]) && cpu_1.tap_enclave_metadata_valid[cpu_1.tap_enclave_metadata_root_snapshot[cpu_1.cpu_enclave_id]] && cpu_1.cpu_owner_map[cpu_1.cpu_addr_map[cpu_1.cpu_pc]] == cpu_1.tap_enclave_metadata_root_snapshot[cpu_1.cpu_enclave_id]));
+    invariant cpu_pc_owned_2: (!enclave_dead && verif && cpu_2.cpu_enclave_id == eid) ==>
+      (cpu_2.cpu_owner_map[cpu_2.cpu_addr_map[cpu_2.cpu_pc]] == eid); // ||
+      //  (valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[cpu_2.cpu_enclave_id]) && cpu_2.tap_enclave_metadata_valid[cpu_2.tap_enclave_metadata_root_snapshot[cpu_2.cpu_enclave_id]] && cpu_2.cpu_owner_map[cpu_2.cpu_addr_map[cpu_2.cpu_pc]] == cpu_2.tap_enclave_metadata_root_snapshot[cpu_2.cpu_enclave_id]));
+
+    // All exclusive addresses should be owned by the enclave `eid` itself or it's root
+    invariant excl_addr_ownership_1:
+      (verif && !enclave_dead) ==>
+        (forall (va: vaddr_t) ::
+          ((valid_enclave_id(eid) && cpu_1.tap_enclave_metadata_valid[eid] && cpu_1.tap_enclave_metadata_addr_excl[eid][va]) ==>
+            (cpu_1.cpu_owner_map[cpu_1.tap_enclave_metadata_addr_map[eid][va]] == eid))); // ||
+            //  (valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid]) && cpu_1.tap_enclave_metadata_valid[cpu_1.tap_enclave_metadata_root_snapshot[eid]] && cpu_1.cpu_owner_map[cpu_1.tap_enclave_metadata_addr_map[eid][va]] == cpu_1.tap_enclave_metadata_root_snapshot[eid]))));
+    invariant excl_addr_ownership_2:
+      (verif && !enclave_dead) ==>
+        (forall (va: vaddr_t) ::
+          ((valid_enclave_id(eid) && cpu_2.tap_enclave_metadata_valid[eid] && cpu_2.tap_enclave_metadata_addr_excl[eid][va]) ==>
+            (cpu_2.cpu_owner_map[cpu_2.tap_enclave_metadata_addr_map[eid][va]] == eid))); // ||
+            //  (valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[eid]) && cpu_2.tap_enclave_metadata_valid[cpu_2.tap_enclave_metadata_root_snapshot[eid]] && cpu_2.cpu_owner_map[cpu_2.tap_enclave_metadata_addr_map[eid][va]] == cpu_2.tap_enclave_metadata_root_snapshot[eid]))));
+
+    // Any root with a valid enclave index is an active and valid enclave
+    // invariant valid_root_is_valid_1:
+    //   verif ==>
+    //     (forall (e: tap_enclave_id_t) ::
+    //       ((valid_enclave_id(e) &&
+    //         cpu_1.tap_enclave_metadata_valid[e]) ==>
+    //         (valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[e]) <==>
+    //       cpu_1.tap_enclave_metadata_valid[cpu_1.tap_enclave_metadata_root_snapshot[e]])));
+    // invariant valid_root_is_valid_2:
+    //   verif ==>
+    //     (forall (e: tap_enclave_id_t) ::
+    //       ((valid_enclave_id(e) &&
+    //         cpu_2.tap_enclave_metadata_valid[e]) ==>
+    //         (valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[e]) <==>
+    //       cpu_2.tap_enclave_metadata_valid[cpu_2.tap_enclave_metadata_root_snapshot[e]])));
+
+    // The CPU page table is consistent with the metadata
+    invariant consistent_pt_1: (verif && valid_enclave_id(cpu_1.cpu_enclave_id) && cpu_1.tap_enclave_metadata_valid[cpu_1.cpu_enclave_id]) ==>
+      (cpu_1.cpu_addr_map   == cpu_1.tap_enclave_metadata_addr_map[cpu_1.cpu_enclave_id] &&
+       cpu_1.cpu_addr_valid == cpu_1.tap_enclave_metadata_addr_valid[cpu_1.cpu_enclave_id]);
+    invariant consistent_pt_2: (verif && valid_enclave_id(cpu_2.cpu_enclave_id) && cpu_2.tap_enclave_metadata_valid[cpu_2.cpu_enclave_id]) ==>
+      (cpu_2.cpu_addr_map   == cpu_2.tap_enclave_metadata_addr_map[cpu_2.cpu_enclave_id] &&
+       cpu_2.cpu_addr_valid == cpu_2.tap_enclave_metadata_addr_valid[cpu_2.cpu_enclave_id]);
+
+    // The pc always has execute permission
+    invariant pc_has_execute_perm:
+      verif ==>
+        (current_mode == mode_enclave ==>
+          (tap_addr_perm_x(cpu_1.cpu_addr_valid[cpu_1.cpu_pc]) && tap_addr_perm_x(cpu_2.cpu_addr_valid[cpu_2.cpu_pc])));
+
+    // PAs are owned by a valid enclave or the null enclave
+    invariant valid_pa_owner_1: verif ==> (forall (pa: wap_addr_t) :: (cpu_1.cpu_owner_map[pa] != tap_invalid_enc_id));
+    invariant valid_pa_owner_2: verif ==> (forall (pa: wap_addr_t) :: (cpu_2.cpu_owner_map[pa] != tap_invalid_enc_id));
+
+    // The root of the null enclave is invalid
+    // invariant root_has_invalid_root_enc_1: verif ==> cpu_1.tap_enclave_metadata_root_snapshot[tap_null_enc_id] == tap_invalid_enc_id;
+    // invariant root_has_invalid_root_enc_2: verif ==> cpu_2.tap_enclave_metadata_root_snapshot[tap_null_enc_id] == tap_invalid_enc_id;
+
+    // If a root snapshot is valid, then the child count of it the root must be positive
+    // invariant root_has_pos_child_count_1:
+    //   verif ==>
+    //     (forall (e : tap_enclave_id_t) ::
+    //       (valid_enclave_id(e) &&
+    //         cpu_1.tap_enclave_metadata_valid[e] &&
+    //         valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[e])) ==>
+    //         (cpu_1.tap_enclave_metadata_child_count[cpu_1.tap_enclave_metadata_root_snapshot[e]] > 0));
+    // invariant root_has_pos_child_count_2:
+    //   verif ==>
+    //     (forall (e : tap_enclave_id_t) ::
+    //       (valid_enclave_id(e) &&
+    //         cpu_2.tap_enclave_metadata_valid[e] &&
+    //         valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[e])) ==>
+    //         (cpu_2.tap_enclave_metadata_child_count[cpu_2.tap_enclave_metadata_root_snapshot[e]] > 0));
+
+    // An invalid enclave cannot be a root snapshot of any enclave
+    // invariant no_invalid_roots_1:
+    //   verif ==>
+    //     (forall (e: tap_enclave_id_t, e_rs: tap_enclave_id_t) ::
+    //       ((valid_enclave_id(e) &&
+    //         cpu_1.tap_enclave_metadata_valid[e] &&
+    //         !cpu_1.tap_enclave_metadata_valid[e_rs] &&
+    //         e_rs != tap_invalid_enc_id) ==>
+    //       cpu_1.tap_enclave_metadata_root_snapshot[e] != e_rs));
+    // invariant no_invalid_roots_2:
+    //   verif ==>
+    //     (forall (e: tap_enclave_id_t, e_rs: tap_enclave_id_t) ::
+    //       ((valid_enclave_id(e) &&
+    //         cpu_2.tap_enclave_metadata_valid[e] &&
+    //         !cpu_2.tap_enclave_metadata_valid[e_rs] &&
+    //         e_rs != tap_invalid_enc_id) ==>
+    //       cpu_2.tap_enclave_metadata_root_snapshot[e] != e_rs));
+
+    //=============================================================================//
+    // Snapshot invariants                                                         //
+    //=============================================================================//
+
+    // Enclave `eid`'s PC is exclusive
+    invariant excl_pc_1:
+      (verif && !enclave_dead) ==>
+        (cpu_1.tap_enclave_metadata_addr_excl[eid][cpu_1.tap_enclave_metadata_pc[eid]]);
+    invariant excl_pc_2:
+      (verif && !enclave_dead) ==>
+        (cpu_2.tap_enclave_metadata_addr_excl[eid][cpu_2.tap_enclave_metadata_pc[eid]]);
+
+    // Enclave `eid`'s' entrypoint are executable
+    invariant all_entrypt_ex_1:
+      verif ==>
+        ((valid_enclave_id(eid) && cpu_1.tap_enclave_metadata_valid[eid]) ==>
+            tap_addr_perm_x(cpu_1.tap_enclave_metadata_addr_valid[eid][cpu_1.tap_enclave_metadata_entrypoint[eid]]));
+    invariant all_entrypt_ex_2:
+      verif ==>
+        ((valid_enclave_id(eid) && cpu_2.tap_enclave_metadata_valid[eid]) ==>
+            tap_addr_perm_x(cpu_2.tap_enclave_metadata_addr_valid[eid][cpu_2.tap_enclave_metadata_entrypoint[eid]]));
+
+    // Valid enclaves have exclusive entrypoints
+    invariant excl_entry_pt_1:
+      verif ==>
+        (forall (e : tap_enclave_id_t) ::
+          (valid_enclave_id(e) && cpu_1.tap_enclave_metadata_valid[e]) ==>
+            (cpu_1.tap_enclave_metadata_addr_excl[e])[cpu_1.tap_enclave_metadata_entrypoint[e]]);
+    invariant excl_entry_pt_2:
+      verif ==>
+        (forall (e : tap_enclave_id_t) ::
+          (valid_enclave_id(e) && cpu_2.tap_enclave_metadata_valid[e]) ==>
+            (cpu_2.tap_enclave_metadata_addr_excl[e])[cpu_2.tap_enclave_metadata_entrypoint[e]]);
+
+    // All enclaves should have a root snapshot that is not itself
+    // invariant non_self_ref_root_1:
+    //   verif ==>
+    //     (forall (e: tap_enclave_id_t) ::
+    //       e != tap_invalid_enc_id ==> cpu_1.tap_enclave_metadata_root_snapshot[e] != e);
+    // invariant non_self_ref_root_2:
+    //   verif ==>
+    //     (forall (e: tap_enclave_id_t) ::
+    //       e != tap_invalid_enc_id ==> cpu_2.tap_enclave_metadata_root_snapshot[e] != e);
+
+    //=============================================================================//
+    // Clone invariants                                                            //
+    //=============================================================================//
+
+    // Snapshots don't have root snapshots
+    // invariant snapshots_are_rootless_1:
+    //   verif ==>
+    //     (forall (e: tap_enclave_id_t) ::
+    //       ((valid_enclave_id(e) &&
+    //         cpu_1.tap_enclave_metadata_valid[e] &&
+    //         cpu_1.tap_enclave_metadata_is_snapshot[e]) ==>
+    //         !valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[e])));
+    // invariant snapshots_are_rootless_2:
+    //   verif ==>
+    //     (forall (e: tap_enclave_id_t) ::
+    //       ((valid_enclave_id(e) &&
+    //         cpu_2.tap_enclave_metadata_valid[e] &&
+    //         cpu_2.tap_enclave_metadata_is_snapshot[e]) ==>
+    //         !valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[e])));
+
+    // All valid roots are snapshots
+    // invariant snapshots_are_roots_1:
+    //   verif ==>
+    //    (forall (e: tap_enclave_id_t) ::
+    //     ((valid_enclave_id(e) &&
+    //       cpu_1.tap_enclave_metadata_valid[e] &&
+    //       valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[e]) &&
+    //       cpu_1.tap_enclave_metadata_valid[cpu_1.tap_enclave_metadata_root_snapshot[e]]) ==>
+    //       cpu_1.tap_enclave_metadata_is_snapshot[cpu_1.tap_enclave_metadata_root_snapshot[e]]));
+    // invariant snapshots_are_roots_2:
+    //   verif ==>
+    //    (forall (e: tap_enclave_id_t) ::
+    //     ((valid_enclave_id(e) &&
+    //       cpu_2.tap_enclave_metadata_valid[e] &&
+    //       valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[e]) &&
+    //       cpu_2.tap_enclave_metadata_valid[cpu_2.tap_enclave_metadata_root_snapshot[e]]) ==>
+    //       cpu_2.tap_enclave_metadata_is_snapshot[cpu_2.tap_enclave_metadata_root_snapshot[e]]));
+
+    //=============================================================================//
+    // KMS invariants                                                              //
+    //=============================================================================//
+    invariant kms_key_valid_1: (verif && !kms_tampered_1) ==> valid_key(cpu_1.tap_kms_key[eid]);
+    invariant kms_key_valid_2: verif ==> valid_key(cpu_2.tap_kms_key[eid]);
+    invariant kms_tag_valid_1: (verif && already_stored()) ==> valid_tag(cpu_1.tap_kms_tag[eid]);
+    invariant kms_tag_valid_2: (verif && already_stored()) ==> valid_tag(cpu_2.tap_kms_tag[eid]);
+    invariant kms_tag_invalid_1: (verif && !already_stored()) ==> !valid_tag(cpu_1.tap_kms_tag[eid]);
+    invariant kms_tag_invalid_2: (verif && !already_stored()) ==> !valid_tag(cpu_2.tap_kms_tag[eid]);
+    // invariant storage_key_invalid_2: (verif && !already_stored()) ==> !valid_key(cpu_2.tap_storage_key[eid][fresh]);
+
+    //=============================================================================//
+    // Storage/KMS/enclave invariants                                              //
+    //=============================================================================//
+    // Equal tags carry equal ciphertexts.  This is the whole point of content
+    // binding, and it is what `loadPS` relies on: a tag the KMS vouches for
+    // identifies the committed state, not merely its position in the sequence.
+    // With counter-style tags the antecedent is satisfiable by a *discarded*
+    // attempt as well as by the committed state, and this invariant is false.
+    invariant storage_same_mem:
+      (verif &&
+        cpu_1.tap_storage_tag[eid][fresh] == cpu_2.tap_storage_tag[eid][fresh]) ==>
+          (cpu_1.tap_storage_mem[eid][fresh] == cpu_2.tap_storage_mem[eid][fresh]);
+    invariant storage_same_addr_valid:
+      (verif &&
+        cpu_1.tap_storage_tag[eid][fresh] == cpu_2.tap_storage_tag[eid][fresh]) ==>
+          cpu_1.tap_storage_addr_valid[eid][fresh] == cpu_2.tap_storage_addr_valid[eid][fresh];
+    // After first store, storage key shoud be equal to kms key
+    invariant kms_storage_same_key_1:
+      (verif && already_stored() && kms_storage_key_sync()) ==>
+        cpu_1.tap_storage_key[eid][fresh] == cpu_1.tap_kms_key[eid];
+    invariant kms_storage_same_key_2:
+      (verif && (already_stored() || phase == ph_pending)) ==>
+          cpu_2.tap_storage_key[eid][fresh] == cpu_2.tap_kms_key[eid];
+    invariant kms_storage_same_tag_1:
+      (verif && kms_storage_tag_sync()) ==>
+        (valid_tag(cpu_1.tap_kms_tag[eid]) ==>
+          cpu_1.tap_storage_tag[eid][fresh] == cpu_1.tap_kms_tag[eid]);
+    // The reference trace's storage holds the committed ciphertext, except inside
+    // the window, where it holds a write whose commit has not landed yet.  The
+    // window is the only place the two can differ, because trace 2 discards an
+    // uncommitted write as soon as the enclave that wrote it dies.
+    invariant kms_storage_same_tag_2:
+      (verif && phase != ph_pending && already_stored()) ==>
+        cpu_2.tap_storage_tag[eid][fresh] == cpu_2.tap_kms_tag[eid];
+    // After first store, storage key and tag should be equal to enclave metadata key and tag
+    // Outside the window, a storage tag that matches the KMS also matches the tag
+    // the enclave is working with.  Inside the window it does not: the enclave has
+    // moved one link ahead of the committed tag, which is the whole point of the
+    // window, so a rollback there can restore a ciphertext the enclave will not
+    // accept.
+    invariant enc_storage_same_tag_1:
+      (verif && !enclave_dead && phase != ph_pending &&
+        already_stored() && kms_storage_tag_sync()) ==>
+        (valid_tag(cpu_1.tap_enclave_metadata_tag[eid]) ==>
+          cpu_1.tap_storage_tag[eid][fresh] == cpu_1.tap_enclave_metadata_tag[eid]);
+    // The reference trace's stored ciphertext carries the tag the enclave is
+    // working with: after a load or a commit because they agree by construction,
+    // and inside the window because the store wrote both.  The bootstrap case is
+    // excluded: with nothing committed there is no load, so storage may still hold
+    // a ciphertext from a session that died before its first commit.
+    invariant enc_storage_same_tag_2:
+      (verif && !enclave_dead && key_fetched &&
+        (phase == ph_pending || (phase == ph_active && already_stored()))) ==>
+        cpu_2.tap_storage_tag[eid][fresh] == cpu_2.tap_enclave_metadata_tag[eid];
+
+    //=============================================================================//
+    // Content binding                                                             //
+    //                                                                             //
+    // A tag is a commitment to the ciphertext that carries it.  Everything the     //
+    // repaired model buys rests on these five invariants: they say that no         //
+    // reachable ciphertext -- written by the enclave, rolled back, replayed from    //
+    // the adversary's archive, or forged by tampering -- carries a tag that does    //
+    // not bind its own content.  Combined with injectivity of `digest`, equal tags  //
+    // therefore force equal ciphertexts, which is exactly what `loadPS` needs and   //
+    // what a counter-style tag cannot provide.                                      //
+    //=============================================================================//
+    //=============================================================================//
+    // Cross-trace agreement on tags                                               //
+    //                                                                             //
+    // The reference trace's KMS ledger is the ledger the attacked trace is trying  //
+    // to keep up with, so the two ledgers must agree: the adversary can stop a      //
+    // commit (by killing the enclave) but it cannot commit something of its own.    //
+    //=============================================================================//
+    invariant kms_tag_same:
+      verif ==> cpu_1.tap_kms_tag[eid] == cpu_2.tap_kms_tag[eid];
+    invariant enc_tag_same:
+      (verif && !enclave_dead && !enclave_abort) ==>
+        cpu_1.tap_enclave_metadata_tag[eid] == cpu_2.tap_enclave_metadata_tag[eid];
+    // Having fetched the tag, and before storing, the enclave's working tag is
+    // exactly the committed one.  Nothing an adversary can do moves the KMS tag,
+    // so this survives key tampering.
+    invariant synced_tag_1:
+      (verif && !enclave_dead && key_fetched && phase != ph_pending) ==>
+        cpu_1.tap_enclave_metadata_tag[eid] == cpu_1.tap_kms_tag[eid];
+    invariant synced_tag_2:
+      (verif && !enclave_dead && key_fetched && phase != ph_pending) ==>
+        cpu_2.tap_enclave_metadata_tag[eid] == cpu_2.tap_kms_tag[eid];
+    // In the window the enclave's tag chains directly from the committed tag.
+    // This is what makes the conditional append accept the commit; without it the
+    // KMS would be entitled to refuse, and the enclave to abort.
+    invariant pending_chains_1:
+      (verif && !enclave_dead && phase == ph_pending) ==>
+        tag_prev(cpu_1.tap_enclave_metadata_tag[eid]) == cpu_1.tap_kms_tag[eid];
+    invariant pending_chains_2:
+      (verif && !enclave_dead && phase == ph_pending) ==>
+        tag_prev(cpu_2.tap_enclave_metadata_tag[eid]) == cpu_2.tap_kms_tag[eid];
+    // The reference trace never has its key tampered with, so its working key is
+    // the KMS key from the moment it fetches it.
+    invariant enc_key_kms_2:
+      (verif && !enclave_dead && key_fetched) ==>
+        cpu_2.tap_enclave_metadata_key[eid] == cpu_2.tap_kms_key[eid];
+    invariant enc_key_valid_2:
+      (verif && !enclave_dead && key_fetched) ==>
+        valid_key(cpu_2.tap_enclave_metadata_key[eid]);
+    // The enclave holds a valid key from the moment it fetches one.  Deleting the
+    // KMS key afterwards does not take the enclave's copy away -- it only stops
+    // the next commit -- so this survives key tampering.
+    invariant enc_key_valid_1:
+      (verif && !enclave_dead && key_fetched) ==>
+        valid_key(cpu_1.tap_enclave_metadata_key[eid]);
+    // If the KMS key is intact and storage is encrypted under it, then the key the
+    // enclave is holding is that key.  The disjunction is what a key deletion or
+    // re-creation leaves behind: either the KMS has no key at all, or the stored
+    // ciphertext is under a key the KMS no longer has.  This is what lets an
+    // aborting commit be attributed to tampering.
+    invariant enc_key_kms_1:
+      (verif && !enclave_dead && key_fetched) ==>
+        (cpu_1.tap_enclave_metadata_key[eid] == cpu_1.tap_kms_key[eid] ||
+          kms_key_deleted() || !kms_storage_key_sync());
+    // In the window, the reference trace's `stale` slot is exactly the committed
+    // ciphertext.  This is what lets trace 2 discard an uncommitted write when the
+    // enclave dies: there is a well-formed committed ciphertext to go back to, and
+    // the rollback's own preconditions (same key, different tag) are met.
+    invariant pending_stale_2:
+      (verif && phase == ph_pending && already_stored()) ==>
+        (cpu_2.tap_storage_key[eid][stale] == cpu_2.tap_kms_key[eid] &&
+          cpu_2.tap_storage_tag[eid][stale] == cpu_2.tap_kms_tag[eid]);
+    // Before the enclave fetches from the KMS it has no tag, so nothing it could
+    // load would be accepted.
+    invariant enc_tag_null_1:
+      (verif && !key_fetched) ==>
+        (!valid_tag(cpu_1.tap_enclave_metadata_tag[eid]) &&
+          !valid_tag(cpu_2.tap_enclave_metadata_tag[eid]));
+    // Where the client key can be.  If the key the KMS currently holds appears
+    // anywhere the adversary can copy it from -- either storage slot, or its
+    // archive -- then the enclave is holding that same key.  `create_key` issues a
+    // key unrelated to every key already in the system, archives included, and no
+    // operation afterwards can reintroduce it: a store writes the key the enclave
+    // is holding, and rollback, replay and archive only move keys that are already
+    // there.  This is what lets an aborting commit be attributed to a key that the
+    // adversary deleted or replaced, rather than to the enclave getting out of step.
+    invariant client_key_1:
+      (verif && key_fetched && valid_key(cpu_1.tap_kms_key[eid])) ==>
+        ((cpu_1.tap_storage_key[eid][fresh] == cpu_1.tap_kms_key[eid] ||
+          cpu_1.tap_storage_key[eid][stale] == cpu_1.tap_kms_key[eid] ||
+          (cpu_1.tap_storage_archive_def[eid] &&
+            cpu_1.tap_storage_archive_key[eid] == cpu_1.tap_kms_key[eid]))
+          ==> cpu_1.tap_enclave_metadata_key[eid] == cpu_1.tap_kms_key[eid]);
+    invariant enc_key_null_1:
+      (verif && !key_fetched) ==>
+        (!valid_key(cpu_1.tap_enclave_metadata_key[eid]) &&
+          !valid_key(cpu_2.tap_enclave_metadata_key[eid]));
+
+    // If storage is tampered, the key or tag in storage is different from that in the enclave.
+    // If the enclave is alive, the key in storage should be different from that in enclave.
+    invariant kms_storage_key_unsync:
+      (verif && !kms_storage_key_sync()) ==>
+        (valid_key(cpu_1.tap_kms_key[eid]) ==>
+          cpu_1.tap_storage_key[eid][fresh] != cpu_1.tap_kms_key[eid]);
+
+    invariant kms_storage_tag_unsync:
+      (verif && !kms_storage_tag_sync()) ==>
+        (valid_tag(cpu_1.tap_kms_tag[eid]) ==>
+          cpu_1.tap_storage_tag[eid][fresh] != cpu_1.tap_kms_tag[eid]);
+
+    //=============================================================================//
+    // Flags for operation scheduling                                              //
+    //=============================================================================//
+    // Limit possible (reachable) states
+    // Storage can only be in sync with a KMS tag that exists.  (The old form of
+    // this invariant also claimed that nothing is stored before the first commit,
+    // which the un-fused model makes false: `storePS` writes a ciphertext under
+    // the client key before any `updateTag` has ever succeeded.)
+    invariant possible_states:
+      verif ==> (kms_storage_tag_sync() ==> already_stored());
+
+    // The phase automaton agrees with the platform state it is meant to track.
+    invariant phase_dead_iff:
+      verif ==> ((phase == ph_dead) == enclave_dead);
+    invariant syncing_not_fetched_no_key:
+      (verif && !enclave_dead && !key_fetched) ==>
+        (phase == ph_syncing &&
+          !valid_key(cpu_1.tap_enclave_metadata_key[eid]) &&
+          !valid_key(cpu_2.tap_enclave_metadata_key[eid]));
+    // Nothing is pending unless the enclave has actually written a ciphertext.
+    invariant pending_implies_stored:
+      (verif && phase == ph_pending) ==> key_fetched;
+    // A bootstrapping enclave (nothing committed yet) is never in `ph_syncing`
+    // once it has its key: there is nothing to load.
+    invariant bootstrap_active:
+      (verif && !enclave_dead && !already_stored() && key_fetched) ==>
+        (phase == ph_active || phase == ph_pending);
+
+    //=============================================================================//
+    // Enclave death invariants                                                    //
+    //=============================================================================//
+    invariant same_dead: verif ==> (enclave_dead == enclave_dead_1 && enclave_dead == enclave_dead_2);
+    invariant dead_implies_invalid:
+      (verif && enclave_dead) ==>
+        (!cpu_1.tap_enclave_metadata_valid[eid] && !cpu_2.tap_enclave_metadata_valid[eid]);
+    invariant dead_implies_untrusted:
+      (verif && enclave_dead) ==>
+        (current_mode == mode_untrusted &&
+          cpu_1.tap_current_mode == mode_untrusted &&
+          cpu_2.tap_current_mode == mode_untrusted);
+
+    invariant trace_2_no_abort: verif ==> !enclave_abort_2;
+
+    invariant key_deleted_implies_invalid:
+      verif ==> (kms_key_deleted() <==> !valid_key(cpu_1.tap_kms_key[eid]));
+
+    // NOTE: the old `abort_implies_tamper` invariant --
+    //   enclave_abort ==> (kms_key_deleted || !kms_storage_key_sync || !kms_storage_tag_sync)
+    // -- is false once storePS and updateTag are separate steps, and not merely
+    // unproven.  An enclave can abort for a perfectly untampered reason (it comes
+    // back from a crash, finds a ciphertext in storage whose tag the KMS has never
+    // committed, and halts), and the adversary can afterwards roll that ciphertext
+    // back so that storage and the KMS agree again.  The abort is sticky but its
+    // cause is not recoverable from the state, so no state predicate can witness
+    // it.  Nothing else in the proof depends on it.
+
+    // Reset flags when enclave is dead
+    // Enclave key and tag are null when dead
+    invariant null_key_and_tag_when_dead_1:
+      (verif && enclave_dead_1) ==>
+        (cpu_1.tap_enclave_metadata_key[eid] == null_key_t && cpu_1.tap_enclave_metadata_tag[eid] == null_tag_t);
+    invariant null_key_and_tag_when_dead_2:
+      (verif && enclave_dead_2) ==>
+        (cpu_2.tap_enclave_metadata_key[eid] == null_key_t && cpu_2.tap_enclave_metadata_tag[eid] == null_tag_t);
+
+    invariant reset_flags_when_dead:
+      (verif && enclave_dead) ==> !key_fetched;
+
+    //=============================================================================//
+    // Verification methods and solver options                                     //
+    //=============================================================================//
+    control {
+      set_solver_option(":mbqi", false);
+      set_solver_option(":case_split", 0);
+      set_solver_option(":relevancy", 0);
+      set_solver_option(":threads", 4);
+      set_solver_option(":blast_full", true);
+      v = induction();
+      check;
+      print_results;
+    }
+}
