@@ -27,7 +27,7 @@ define tap_proof_op_valid(o : tap_proof_op_t) : boolean
   // (o == tap_proof_op_clone)     || (o == tap_proof_op_snapshot)  ||
   (o == tap_proof_op_create_key) || (o == tap_proof_op_delete_key)  ||
   (o == tap_proof_op_load_storage) || (o == tap_proof_op_store_storage) ||
-  (o == tap_proof_op_tamper_storage) || (o == tap_proof_op_rollback_storage) ||
+  (o == tap_proof_op_tamper_storage) ||
   (o == tap_proof_op_replay_storage) ||
   (o == tap_proof_op_release)   || (o == tap_proof_op_block);
 

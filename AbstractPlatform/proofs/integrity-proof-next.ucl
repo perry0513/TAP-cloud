@@ -17,10 +17,6 @@ module integrity_proof {
     assume (current_mode == current_mode_1);
     assume (kms_tampered == kms_tampered_1);
     assume (storage_tampered == storage_tampered_1);
-    assume (storage_rolledback == storage_rolledback_1);
-
-    // Only rollback storage when storage is not yet tampered
-    assume (r_proof_op == tap_proof_op_rollback_storage ==> !storage_rolledback);
 
     //---------------------------------------------------------------------------//
     // The enclave's program.                                                     //
@@ -58,17 +54,20 @@ module integrity_proof {
     // survives is the adversary's choice, and that choice is the attack we are     //
     // checking.  Trace 2 is the reference: it tracks the committed history, and a  //
     // write that can no longer be committed is not part of that history, so it     //
-    // goes back to the last committed ciphertext.  This is a rollback of trace 2's //
-    // *own* uncommitted write, not an adversary action on it.                      //
+    // goes back to the last committed ciphertext.  This discards trace 2's *own*  //
+    // uncommitted write; it is not an adversary action on it.                       //
     //                                                                            //
-    // At rank 0 there is nothing to go back to and the rollback simply fails;      //
-    // that is harmless, because with nothing committed the enclave never loads.    //
+    // The restore is a replay of the tag the KMS holds: with content-binding tags
+    // that tag names the committed ciphertext, so "go back to the last committed
+    // state" is directly expressible.  At rank 0 nothing has been committed, the
+    // replay finds no such tag and fails, and that is harmless because with
+    // nothing committed the enclave never loads.
     //---------------------------------------------------------------------------//
     if (current_mode == mode_untrusted &&
         r_proof_op == tap_proof_op_destroy &&
         r_eid == eid && phase == ph_pending &&
         status_1' == enclave_op_success) {
-      call (discard_status') = cpu_2.rollback_storage(eid);
+      call (discard_status') = cpu_2.replay_storage(eid, cpu_2.tap_kms_tag[eid]);
     }
 
     //---------------------------------------------------------------------------//
@@ -100,7 +99,6 @@ module integrity_proof {
     enclave_abort' = enclave_abort_1';
     kms_tampered' = kms_tampered_1';
     storage_tampered' = storage_tampered_1';
-    storage_rolledback' = storage_rolledback_1';
     status' = status_1';
 
     // `already_stored`, `kms_key_deleted`, `kms_storage_key_sync` and

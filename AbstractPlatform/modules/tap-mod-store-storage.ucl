@@ -32,26 +32,23 @@ procedure [noinline] _store_storage (store_vaddr : vaddr2bool_t)
   ensures (status == enclave_op_success) ==>
             (forall (v : vaddr_t) ::
               (store_vaddr[v] && tap_enclave_metadata_addr_excl[cpu_enclave_id][v] ==>
-                tap_storage_mem[cpu_enclave_id][fresh][v] == cpu_mem[cpu_addr_map[v]]) &&
-            tap_storage_mem[cpu_enclave_id][stale] == old(tap_storage_mem)[cpu_enclave_id][fresh]);
+                tap_storage_mem[cpu_enclave_id][v] == cpu_mem[cpu_addr_map[v]]) &&
+            true);
   // Addresses outside the stored set carry the canonical blank value, so that
   // the ciphertext -- and hence its digest -- is determined by the stored data
   // alone and not by leftover values in the encoding buffer.
   ensures (status == enclave_op_success) ==>
             (forall (v : vaddr_t) ::
-              !store_vaddr[v] ==> tap_storage_mem[cpu_enclave_id][fresh][v] == k0_word_t);
+              !store_vaddr[v] ==> tap_storage_mem[cpu_enclave_id][v] == k0_word_t);
   // Update on store filter
   ensures (status == enclave_op_success) ==>
-            (tap_storage_addr_valid[cpu_enclave_id][fresh] == store_vaddr &&
-              tap_storage_addr_valid[cpu_enclave_id][stale] == old(tap_storage_addr_valid)[cpu_enclave_id][fresh]);
+            (tap_storage_addr_valid[cpu_enclave_id] == store_vaddr);
   // Update on key
   ensures (status == enclave_op_success) ==>
-            (tap_storage_key[cpu_enclave_id][fresh] == tap_enclave_metadata_key[cpu_enclave_id] &&
-              tap_storage_key[cpu_enclave_id][stale] == old(tap_storage_key)[cpu_enclave_id][fresh]);
+            (tap_storage_key[cpu_enclave_id] == tap_enclave_metadata_key[cpu_enclave_id]);
   // Update on tag
   ensures (status == enclave_op_success) ==>
-            (tap_storage_tag[cpu_enclave_id][fresh] == tap_enclave_metadata_tag[cpu_enclave_id] &&
-              tap_storage_tag[cpu_enclave_id][stale] == old(tap_storage_tag)[cpu_enclave_id][fresh]);
+            (tap_storage_tag[cpu_enclave_id] == tap_enclave_metadata_tag[cpu_enclave_id]);
   // All other entries stay the same
   ensures (status == enclave_op_success) ==>
             (forall (e : tap_enclave_id_t) ::
@@ -66,8 +63,8 @@ procedure [noinline] _store_storage (store_vaddr : vaddr2bool_t)
   ensures (status == enclave_op_success) ==>
             (tap_enclave_metadata_tag[cpu_enclave_id] ==
               chain(old(tap_enclave_metadata_tag)[cpu_enclave_id],
-                    tap_storage_mem[cpu_enclave_id][fresh],
-                    tap_storage_addr_valid[cpu_enclave_id][fresh]));
+                    tap_storage_mem[cpu_enclave_id],
+                    tap_storage_addr_valid[cpu_enclave_id]));
   ensures (status == enclave_op_success) ==>
             (forall (e : tap_enclave_id_t) ::
               (e != cpu_enclave_id) ==>
@@ -135,10 +132,10 @@ procedure [noinline] _store_storage (store_vaddr : vaddr2bool_t)
   var prod_key : [tag_t]key_t;
   var va : vaddr_t;
   var stored_mem : storage_mem_t;
-  var mem : [boolean]storage_mem_t;
-  var valid : [boolean]vaddr2bool_t;
-  var key : [boolean]key_t;
-  var tag : [boolean]tag_t;
+  var mem : storage_mem_t;
+  var valid : vaddr2bool_t;
+  var key : key_t;
+  var tag : tag_t;
 
   eid = cpu_enclave_id;
 
@@ -159,15 +156,9 @@ procedure [noinline] _store_storage (store_vaddr : vaddr2bool_t)
   }
 
   if (status != enclave_op_failed) {
-    // Move the fresh data to stale
-    mem[stale] = tap_storage_mem[eid][fresh];
-    valid[stale] = tap_storage_addr_valid[eid][fresh];
-    key[stale] = tap_storage_key[eid][fresh];
-    tag[stale] = tap_storage_tag[eid][fresh];
-
     // Store the data into storage
-    valid[fresh] = store_vaddr;
-    key[fresh] = tap_enclave_metadata_key[eid];
+    valid = store_vaddr;
+    key = tap_enclave_metadata_key[eid];
 
     // Assemble the plaintext that is about to be encrypted.  Start from the
     // canonical blank buffer so that untouched addresses do not leak into the
@@ -193,14 +184,14 @@ procedure [noinline] _store_storage (store_vaddr : vaddr2bool_t)
       stored_mem[va] = cpu_mem[cpu_addr_map[va]];
     }
 
-    mem[fresh] = stored_mem;
+    mem = stored_mem;
 
     // The tag is computed *after* the ciphertext, from the ciphertext.  This is
     // what makes a tag a commitment to content rather than to position: two
     // different states stored from the same base tag receive different tags.
     tap_enclave_metadata_tag[eid] = chain(tap_enclave_metadata_tag[eid],
                                           stored_mem, store_vaddr);
-    tag[fresh] = tap_enclave_metadata_tag[eid];
+    tag = tap_enclave_metadata_tag[eid];
 
     // Record the write in the replay history.
     prod = tap_storage_produced[eid];

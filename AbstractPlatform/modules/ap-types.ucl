@@ -47,7 +47,7 @@ type mode_t = enum {
 //
 type tap_op_t = enum {
     Launch, Destroy, Enter, Exit, Resume, Pause, Snapshot, Clone, HavocMem, HavocPCRegs, HavocPT, Default,
-    StoreStorage, LoadStorage, TamperStorage, RollbackStorage, ReplayStorage, CreateKey, GetKeyAndTag, UpdateTag, DeleteKey, TransferKeyAndTag
+    StoreStorage, LoadStorage, TamperStorage, ReplayStorage, CreateKey, GetKeyAndTag, UpdateTag, DeleteKey, TransferKeyAndTag
 };
 
 //
@@ -184,15 +184,15 @@ axiom (forall (t : tag_t) :: next_tag(t) != t);
 axiom (forall (t : tag_t) :: next_tag(t) != null_tag_t);
 axiom (forall (t1, t2 : tag_t) :: (t1 != t2) ==> (next_tag(t1) != next_tag(t2)));
 
-// persistent storage for each enclave
-type tap_storage_mem_t                     = [tap_enclave_id_t][boolean]storage_mem_t;
-type tap_storage_addr_valid_t              = [tap_enclave_id_t][boolean]vaddr2bool_t;
-type tap_storage_key_t                     = [tap_enclave_id_t][boolean]key_t;
-type tap_storage_tag_t                     = [tap_enclave_id_t][boolean]tag_t;
-const fresh : boolean;
-const stale : boolean;
-axiom fresh == true;
-axiom stale == false;
+// Persistent storage holds one ciphertext per enclave.  The earlier model kept a
+// second, "stale" slot as the source for rollbackPS; with the replay history of
+// tap-mod-replay-storage.ucl that slot is redundant -- its value is always a
+// ciphertext some earlier storePS wrote, so rolling back to it is the special
+// case of replaying that tag.
+type tap_storage_mem_t                     = [tap_enclave_id_t]storage_mem_t;
+type tap_storage_addr_valid_t              = [tap_enclave_id_t]vaddr2bool_t;
+type tap_storage_key_t                     = [tap_enclave_id_t]key_t;
+type tap_storage_tag_t                     = [tap_enclave_id_t]tag_t;
 
 // what enclaves exists in the system?
 type tap_enclave_metadata_valid_t          = [tap_enclave_id_t]boolean;
@@ -246,7 +246,6 @@ type tap_proof_op_t = enum {
   tap_proof_op_store_storage,
   tap_proof_op_load_storage,
   tap_proof_op_tamper_storage,
-  tap_proof_op_rollback_storage,
   tap_proof_op_replay_storage,
   tap_proof_op_create_key,
   tap_proof_op_get_key_and_tag,

@@ -33,18 +33,12 @@ procedure [noinline] replay_storage (eid : tap_enclave_id_t, t : tag_t)
   //----------------------------------------------------------------------//
   // State updates on success                                             //
   //----------------------------------------------------------------------//
-  // The replayed ciphertext replaces the fresh one; `stale` is untouched,
-  // because the adversary is writing one object back, not shifting a history.
+  // The replayed ciphertext replaces whatever is in storage.
   ensures (status == enclave_op_success) ==>
-            (tap_storage_mem[eid][fresh]        == tag_mem(t) &&
-              tap_storage_addr_valid[eid][fresh] == tag_valid_map(t) &&
-              tap_storage_key[eid][fresh]        == tap_storage_produced_key[eid][t] &&
-              tap_storage_tag[eid][fresh]        == t);
-  ensures (status == enclave_op_success) ==>
-            (tap_storage_mem[eid][stale]        == old(tap_storage_mem)[eid][stale] &&
-              tap_storage_addr_valid[eid][stale] == old(tap_storage_addr_valid)[eid][stale] &&
-              tap_storage_key[eid][stale]        == old(tap_storage_key)[eid][stale] &&
-              tap_storage_tag[eid][stale]        == old(tap_storage_tag)[eid][stale]);
+            (tap_storage_mem[eid]        == tag_mem(t) &&
+              tap_storage_addr_valid[eid] == tag_valid_map(t) &&
+              tap_storage_key[eid]        == tap_storage_produced_key[eid][t] &&
+              tap_storage_tag[eid]        == t);
   ensures (status == enclave_op_success) ==>
             (forall (e : tap_enclave_id_t) ::
               (e != eid) ==>
@@ -69,31 +63,16 @@ procedure [noinline] replay_storage (eid : tap_enclave_id_t, t : tag_t)
   modifies tap_storage_key;
   modifies tap_storage_tag;
 {
-  var mem   : [boolean]storage_mem_t;
-  var valid : [boolean]vaddr2bool_t;
-  var key   : [boolean]key_t;
-  var tag   : [boolean]tag_t;
-
   status = enclave_op_success;
 
   if (cpu_enclave_id != tap_null_enc_id ||
       !tap_storage_produced[eid][t]) {
     status = enclave_op_failed;
   } else {
-    mem   = tap_storage_mem[eid];
-    valid = tap_storage_addr_valid[eid];
-    key   = tap_storage_key[eid];
-    tag   = tap_storage_tag[eid];
-
-    mem[fresh]   = tag_mem(t);
-    valid[fresh] = tag_valid_map(t);
-    key[fresh]   = tap_storage_produced_key[eid][t];
-    tag[fresh]   = t;
-
-    tap_storage_mem[eid]        = mem;
-    tap_storage_addr_valid[eid] = valid;
-    tap_storage_key[eid]        = key;
-    tap_storage_tag[eid]        = tag;
+    tap_storage_mem[eid]        = tag_mem(t);
+    tap_storage_addr_valid[eid] = tag_valid_map(t);
+    tap_storage_key[eid]        = tap_storage_produced_key[eid][t];
+    tap_storage_tag[eid]        = t;
   }
 }
 }

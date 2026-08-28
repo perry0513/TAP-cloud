@@ -40,16 +40,12 @@ module integrity_proof {
             // Initally tag in kms is null
             assume (!valid_tag(cpu_1.tap_kms_tag[eid]));
             // Initially storage is empty (both fresh and stale keys are invalid)
-            assume (!valid_key(cpu_1.tap_storage_key[eid][fresh]) &&
-                    !valid_tag(cpu_1.tap_storage_tag[eid][fresh]) &&
-                    !valid_key(cpu_1.tap_storage_key[eid][stale]) &&
-                    !valid_tag(cpu_1.tap_storage_tag[eid][stale]));
+            assume (!valid_key(cpu_1.tap_storage_key[eid]) &&
+                    !valid_tag(cpu_1.tap_storage_tag[eid]));
             // ... and empty storage holds the blank ciphertext, which is what the
             // null tag binds.  Content binding therefore holds from the start.
-            assume (cpu_1.tap_storage_mem[eid][fresh] == kzero_storage_mem_t &&
-                    cpu_1.tap_storage_addr_valid[eid][fresh] == kempty_vaddr2bool_t &&
-                    cpu_1.tap_storage_mem[eid][stale] == kzero_storage_mem_t &&
-                    cpu_1.tap_storage_addr_valid[eid][stale] == kempty_vaddr2bool_t);
+            assume (cpu_1.tap_storage_mem[eid] == kzero_storage_mem_t &&
+                    cpu_1.tap_storage_addr_valid[eid] == kempty_vaddr2bool_t);
             // The enclave has not yet written anything, so there is nothing to replay.
             assume (forall (tg : tag_t) :: !cpu_1.tap_storage_produced[eid][tg]);
 
@@ -62,16 +58,12 @@ module integrity_proof {
             // Initally tag in kms is null
             assume (!valid_tag(cpu_2.tap_kms_tag[eid]));
             // Initially storage is empty (both fresh and stale keys are invalid)
-            assume (!valid_key(cpu_2.tap_storage_key[eid][fresh]) &&
-                    !valid_tag(cpu_2.tap_storage_tag[eid][fresh]) &&
-                    !valid_key(cpu_2.tap_storage_key[eid][stale]) &&
-                    !valid_tag(cpu_2.tap_storage_tag[eid][stale]));
+            assume (!valid_key(cpu_2.tap_storage_key[eid]) &&
+                    !valid_tag(cpu_2.tap_storage_tag[eid]));
             // ... and empty storage holds the blank ciphertext, which is what the
             // null tag binds.  Content binding therefore holds from the start.
-            assume (cpu_2.tap_storage_mem[eid][fresh] == kzero_storage_mem_t &&
-                    cpu_2.tap_storage_addr_valid[eid][fresh] == kempty_vaddr2bool_t &&
-                    cpu_2.tap_storage_mem[eid][stale] == kzero_storage_mem_t &&
-                    cpu_2.tap_storage_addr_valid[eid][stale] == kempty_vaddr2bool_t);
+            assume (cpu_2.tap_storage_mem[eid] == kzero_storage_mem_t &&
+                    cpu_2.tap_storage_addr_valid[eid] == kempty_vaddr2bool_t);
             // The enclave has not yet written anything, so there is nothing to replay.
             assume (forall (tg : tag_t) :: !cpu_2.tap_storage_produced[eid][tg]);
           }
@@ -138,7 +130,6 @@ module integrity_proof {
         assume (!enclave_abort && !cpu_1.tap_enclave_abort && !cpu_2.tap_enclave_abort);
         assume (!kms_tampered && !cpu_1.tap_kms_tampered && !cpu_2.tap_kms_tampered);
         assume (!storage_tampered && !cpu_1.tap_storage_tampered && !cpu_2.tap_storage_tampered);
-        assume (!storage_rolledback && !cpu_1.tap_storage_rolledback && !cpu_2.tap_storage_rolledback);
 
         // The enclave has just been launched: it is syncing, has not fetched its
         // key, and has nothing pending.

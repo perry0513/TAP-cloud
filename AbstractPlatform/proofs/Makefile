@@ -4,7 +4,7 @@ CACHE_SOURCE=./../modules/tap-mod-cache.ucl
 CPU_SOURCES=$(COMMON_SOURCE) $(AP_SOURCE) $(CACHE_SOURCE) ./../modules/tap-mod-cpu.ucl
 TAP_OP_SOURCE=./../modules/tap-mod-destroy.ucl ./../modules/tap-mod-enter.ucl ./../modules/tap-mod-exit.ucl ./../modules/tap-mod-launch.ucl ./../modules/tap-mod-pause.ucl ./../modules/tap-mod-resume.ucl ./../modules/tap-mod-block-memory-region.ucl ./../modules/tap-mod-release-memory-region.ucl
 # TAP_OP_SOURCE+=./../modules/tap-mod-clone.ucl ./../modules/tap-mod-snapshot.ucl // Cerberus
-TAP_OP_SOURCE+=./../modules/tap-mod-load-storage.ucl ./../modules/tap-mod-store-storage.ucl ./../modules/tap-mod-kms.ucl ./../modules/tap-mod-tamper-storage.ucl ./../modules/tap-mod-rollback-storage.ucl ./../modules/tap-mod-replay-storage.ucl
+TAP_OP_SOURCE+=./../modules/tap-mod-load-storage.ucl ./../modules/tap-mod-store-storage.ucl ./../modules/tap-mod-kms.ucl ./../modules/tap-mod-tamper-storage.ucl ./../modules/tap-mod-replay-storage.ucl
 TAP_SOURCES=$(CPU_SOURCES) $(TAP_OP_SOURCE) ./../modules/tap-mod.ucl
 PROOF_SOURCES=$(TAP_SOURCES) ./proof-common.ucl
 
@@ -46,7 +46,6 @@ INTEGRITY_PROOF_adv_pause=./../modules/tap-mod-integrity/adv-pause.ucl ./../modu
 INTEGRITY_PROOF_adv_release=./../modules/tap-mod-integrity/adv-release.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
 INTEGRITY_PROOF_adv_resume=./../modules/tap-mod-integrity/adv-resume.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
 INTEGRITY_PROOF_adv_tamper_storage=./../modules/tap-mod-integrity/adv-tamper-storage.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
-INTEGRITY_PROOF_adv_rollback_storage=./../modules/tap-mod-integrity/adv-rollback-storage.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
 INTEGRITY_PROOF_adv_create_key=./../modules/tap-mod-integrity/adv-create-key.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
 INTEGRITY_PROOF_adv_delete_key=./../modules/tap-mod-integrity/adv-delete-key.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
 INTEGRITY_PROOF_adv_store_storage=./../modules/tap-mod-integrity/adv-store-storage.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
@@ -79,7 +78,6 @@ MEM_CONF_PROOF_obs_resume=./../modules/tap-mod-conf/obs-resume.ucl  ./../modules
 MEM_CONF_PROOF_obs_create_key=./../modules/tap-mod-conf/obs-create-key.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
 MEM_CONF_PROOF_obs_delete_key=./../modules/tap-mod-conf/obs-delete-key.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
 MEM_CONF_PROOF_obs_tamper_storage=./../modules/tap-mod-conf/obs-tamper-storage.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
-MEM_CONF_PROOF_obs_rollback_storage=./../modules/tap-mod-conf/obs-rollback-storage.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
 MEM_CONF_PROOF_obs_store_storage=./../modules/tap-mod-conf/obs-store-storage.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
 MEM_CONF_PROOF_obs_load_storage=./../modules/tap-mod-conf/obs-load-storage.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
 MEM_CONF_PROOF_obs_replay_storage=./../modules/tap-mod-conf/obs-replay-storage.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
@@ -256,12 +254,6 @@ integrity-case-split-new:
 	time uclid -g integrity-adv-tamper-storage/tamper-storage --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_tamper_storage)
 	./run_all_smt.sh integrity-adv-tamper-storage 10
 
-	# Rollback storage operation
-	rm -rf integrity-adv-rollback-storage/
-	mkdir -p integrity-adv-rollback-storage/
-	time uclid -g integrity-adv-rollback-storage/rollback-storage --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_rollback_storage)
-	./run_all_smt.sh integrity-adv-rollback-storage 10
-
 	# Get key and tag operation
 	rm -rf integrity-enc-get-key-and-tag/
 	mkdir -p integrity-enc-get-key-and-tag/
@@ -433,12 +425,6 @@ mem-conf-case-split-new:
 	time uclid -g mem-conf-obs-tamper-storage/tamper-storage --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_tamper_storage)
 	./run_all_smt.sh mem-conf-obs-tamper-storage 10
 
-	# Observer rollback storage operation
-	rm -rf mem-conf-obs-rollback-storage
-	mkdir -p mem-conf-obs-rollback-storage
-	time uclid -g mem-conf-obs-rollback-storage/rollback-storage --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_rollback_storage)
-	./run_all_smt.sh mem-conf-obs-rollback-storage 10
-
 	# Observer replay storage operation
 	rm -rf mem-conf-obs-replay-storage
 	mkdir -p mem-conf-obs-replay-storage
@@ -547,7 +533,6 @@ clean:
 	rm -rf integrity-adv-create-key
 	rm -rf integrity-adv-delete-key
 	rm -rf integrity-adv-tamper-storage
-	rm -rf integrity-adv-rollback-storage
 	rm -rf integrity-adv-store-storage
 	rm -rf integrity-adv-load-storage
 	rm -rf mem-conf
@@ -568,7 +553,6 @@ clean:
 	rm -rf mem-conf-obs-create-key
 	rm -rf mem-conf-obs-delete-key
 	rm -rf mem-conf-obs-tamper-storage
-	rm -rf mem-conf-obs-rollback-storage
 	rm -rf mem-conf-obs-load-storage
 	rm -rf mem-conf-obs-store-storage
 	rm -rf pt-conf

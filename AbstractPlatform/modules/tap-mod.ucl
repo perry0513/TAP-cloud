@@ -37,7 +37,6 @@ module tap {
   output tap_enclave_abort      : boolean;
   output tap_kms_tampered       : boolean;
   output tap_storage_tampered   : boolean;
-  output tap_storage_rolledback : boolean;
 
   //
   // TAP uarch state
@@ -922,9 +921,6 @@ module tap {
         }
           (op == TamperStorage) : {
             call (status) = tamper_storage(r_eid);
-          }
-          (op == RollbackStorage) : {
-            call (status) = rollback_storage(r_eid);
           }
           (op == CreateKey) : {
             call (status) = create_key(r_eid);

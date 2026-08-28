@@ -192,12 +192,6 @@ module tap {
         tap_storage_tampered = true;
       }
     }
-    (op == tap_proof_op_rollback_storage) : {
-      call (status) = rollback_storage(r_eid);
-      if (r_eid == eid && status == enclave_op_success) {
-        tap_storage_tampered = true;
-      }
-    }
     (op == tap_proof_op_replay_storage) : {
       havoc r_replay_tag;
       call (status) = replay_storage(r_eid, r_replay_tag);

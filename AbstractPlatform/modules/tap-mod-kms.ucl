@@ -29,13 +29,11 @@ procedure [noinline] create_key (eid : tap_enclave_id_t)
   // New key is different from any other keys in the enclave metadata
   ensures (status == enclave_op_success) ==>
             (forall (e : tap_enclave_id_t) ::
-              (forall (f : boolean) ::
-                (tap_kms_key[eid] != tap_enclave_metadata_key[e])));
+              (tap_kms_key[eid] != tap_enclave_metadata_key[e]));
   // New key is different from any keys that are used to encrypt data (including itself)
   ensures (status == enclave_op_success) ==>
             (forall (e : tap_enclave_id_t) ::
-              (forall (f : boolean) ::
-                (tap_kms_key[eid] != tap_storage_key[e][f])));
+              (tap_kms_key[eid] != tap_storage_key[e]));
   // ... including every key the enclave has ever encrypted with.  A fresh key is
   // unrelated to everything that already exists, replay history included.
   ensures (status == enclave_op_success) ==>
@@ -95,10 +93,9 @@ procedure [noinline] create_key (eid : tap_enclave_id_t)
             (forall (e : tap_enclave_id_t, t : tag_t) ::
               tap_storage_produced[e][t] ==> (key != tap_storage_produced_key[e][t])) &&
             (forall (e : tap_enclave_id_t) ::
-              (forall (f : boolean) ::
-                (key != tap_kms_key[e] &&
-                  key != tap_enclave_metadata_key[e] &&
-                  key != tap_storage_key[e][f]))));
+              (key != tap_kms_key[e] &&
+                key != tap_enclave_metadata_key[e] &&
+                key != tap_storage_key[e])));
     tap_kms_key[eid] = key;
     // Create key does not reset the tag
     // tap_kms_tag[eid] = null_tag_t;

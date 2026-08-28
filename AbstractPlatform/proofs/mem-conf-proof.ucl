@@ -747,20 +747,13 @@ module mem_confidentiality_proof {
     //-------------------------------------------------------------------//
     // Storage invariants                                                //
     //-------------------------------------------------------------------//
-    invariant storage_fresh_mem_same:
+    invariant storage_mem_same:
       verif ==> (forall (e: tap_enclave_id_t) ::
                   valid_enclave_id(e) ==>
                     (forall (va : vaddr_t) ::
-                      (cpu_1.tap_storage_addr_valid[e][fresh][va] &&
-                       cpu_2.tap_storage_addr_valid[e][fresh][va]) ==>
-                        (cpu_1.tap_storage_mem[e][fresh][va] == cpu_2.tap_storage_mem[e][fresh][va])));
-    invariant storage_stale_mem_same:
-      verif ==> (forall (e: tap_enclave_id_t) ::
-                  valid_enclave_id(e) ==>
-                    (forall (va : vaddr_t) ::
-                      (cpu_1.tap_storage_addr_valid[e][stale][va] &&
-                       cpu_2.tap_storage_addr_valid[e][stale][va]) ==>
-                        (cpu_1.tap_storage_mem[e][stale][va] == cpu_2.tap_storage_mem[e][stale][va])));
+                      (cpu_1.tap_storage_addr_valid[e][va] &&
+                       cpu_2.tap_storage_addr_valid[e][va]) ==>
+                        (cpu_1.tap_storage_mem[e][va] == cpu_2.tap_storage_mem[e][va])));
     invariant storage_key_same:
       verif ==> (forall (e: tap_enclave_id_t) ::
                   (valid_enclave_id(e)) ==>
@@ -831,17 +824,17 @@ module mem_confidentiality_proof {
 
       // If attacker tampered the storage, the storage must be tampered the same way
       assume (r_proof_op == tap_proof_op_tamper_storage) ==>
-              ((cpu_1').tap_storage_mem[r_eid][fresh] ==
-               (cpu_2').tap_storage_mem[r_eid][fresh]);
+              ((cpu_1').tap_storage_mem[r_eid] ==
+               (cpu_2').tap_storage_mem[r_eid]);
       assume (r_proof_op == tap_proof_op_tamper_storage) ==>
-              ((cpu_1').tap_storage_key[r_eid][fresh] ==
-               (cpu_2').tap_storage_key[r_eid][fresh]);
+              ((cpu_1').tap_storage_key[r_eid] ==
+               (cpu_2').tap_storage_key[r_eid]);
       assume (r_proof_op == tap_proof_op_tamper_storage) ==>
-              ((cpu_1').tap_storage_tag[r_eid][fresh] ==
-               (cpu_2').tap_storage_tag[r_eid][fresh]);
+              ((cpu_1').tap_storage_tag[r_eid] ==
+               (cpu_2').tap_storage_tag[r_eid]);
       assume (r_proof_op == tap_proof_op_tamper_storage) ==>
-              ((cpu_1').tap_storage_addr_valid[r_eid][fresh] ==
-               (cpu_2').tap_storage_addr_valid[r_eid][fresh]);
+              ((cpu_1').tap_storage_addr_valid[r_eid] ==
+               (cpu_2').tap_storage_addr_valid[r_eid]);
 
       // The adversary replays the same previously produced ciphertext in both
       // traces, exactly as it tampers identically in both.  Agreeing on the tag
@@ -850,31 +843,31 @@ module mem_confidentiality_proof {
       // proof carries no content-binding invariant to relate the untouched
       // storage of the failing trace to the tag of the succeeding one.
       assume (r_proof_op == tap_proof_op_replay_storage) ==>
-              ((cpu_1').tap_storage_mem[r_eid][fresh] ==
-               (cpu_2').tap_storage_mem[r_eid][fresh]);
+              ((cpu_1').tap_storage_mem[r_eid] ==
+               (cpu_2').tap_storage_mem[r_eid]);
       assume (r_proof_op == tap_proof_op_replay_storage) ==>
-              ((cpu_1').tap_storage_addr_valid[r_eid][fresh] ==
-               (cpu_2').tap_storage_addr_valid[r_eid][fresh]);
+              ((cpu_1').tap_storage_addr_valid[r_eid] ==
+               (cpu_2').tap_storage_addr_valid[r_eid]);
       assume (r_proof_op == tap_proof_op_replay_storage) ==>
-              ((cpu_1').tap_storage_key[r_eid][fresh] ==
-               (cpu_2').tap_storage_key[r_eid][fresh]);
+              ((cpu_1').tap_storage_key[r_eid] ==
+               (cpu_2').tap_storage_key[r_eid]);
       assume (r_proof_op == tap_proof_op_replay_storage) ==>
-              ((cpu_1').tap_storage_tag[r_eid][fresh] ==
-               (cpu_2').tap_storage_tag[r_eid][fresh]);
+              ((cpu_1').tap_storage_tag[r_eid] ==
+               (cpu_2').tap_storage_tag[r_eid]);
 
       // If the client enclave stores to storage, the storage must be stored the same way
       assume (e_proof_op == tap_proof_op_store_storage) ==>
-              ((cpu_1').tap_storage_mem[cpu_1.cpu_enclave_id][fresh] ==
-               (cpu_2').tap_storage_mem[cpu_2.cpu_enclave_id][fresh]);
+              ((cpu_1').tap_storage_mem[cpu_1.cpu_enclave_id] ==
+               (cpu_2').tap_storage_mem[cpu_2.cpu_enclave_id]);
       assume (e_proof_op == tap_proof_op_store_storage) ==>
-              ((cpu_1').tap_storage_key[cpu_1.cpu_enclave_id][fresh] ==
-               (cpu_2').tap_storage_key[cpu_2.cpu_enclave_id][fresh]);
+              ((cpu_1').tap_storage_key[cpu_1.cpu_enclave_id] ==
+               (cpu_2').tap_storage_key[cpu_2.cpu_enclave_id]);
       assume (e_proof_op == tap_proof_op_store_storage) ==>
-              ((cpu_1').tap_storage_tag[cpu_1.cpu_enclave_id][fresh] ==
-               (cpu_2').tap_storage_tag[cpu_2.cpu_enclave_id][fresh]);
+              ((cpu_1').tap_storage_tag[cpu_1.cpu_enclave_id] ==
+               (cpu_2').tap_storage_tag[cpu_2.cpu_enclave_id]);
       assume (e_proof_op == tap_proof_op_store_storage) ==>
-              ((cpu_1').tap_storage_addr_valid[cpu_1.cpu_enclave_id][fresh] ==
-               (cpu_2').tap_storage_addr_valid[cpu_2.cpu_enclave_id][fresh]);
+              ((cpu_1').tap_storage_addr_valid[cpu_1.cpu_enclave_id] ==
+               (cpu_2').tap_storage_addr_valid[cpu_2.cpu_enclave_id]);
 
       // assert (current_mode_1' == current_mode_2');
 

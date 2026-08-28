@@ -35,7 +35,6 @@ module integrity_proof {
     var enclave_abort, enclave_abort_1, enclave_abort_2          : boolean;
     var kms_tampered, kms_tampered_1, kms_tampered_2             : boolean;
     var storage_tampered, storage_tampered_1, storage_tampered_2 : boolean;
-    var storage_rolledback, storage_rolledback_1, storage_rolledback_2 : boolean;
 
     // Where the enclave has got to in its program.  See `phase_t` in
     // proof-common.ucl; the scheduling assumptions in integrity-proof-next.ucl
@@ -66,8 +65,7 @@ module integrity_proof {
                         tap_enclave_dead: (enclave_dead_1),
                         tap_enclave_abort: (enclave_abort_1),
                         tap_kms_tampered: (kms_tampered_1),
-                        tap_storage_tampered: (storage_tampered_1),
-                        tap_storage_rolledback: (storage_rolledback_1));
+                        tap_storage_tampered: (storage_tampered_1));
 
     instance cpu_2: tap(tap_r_eid: (r_eid),
                         tap_r_parent_eid: (r_parent_eid),
@@ -87,8 +85,7 @@ module integrity_proof {
                         tap_enclave_dead: (enclave_dead_2),
                         tap_enclave_abort: (enclave_abort_2),
                         tap_kms_tampered: (kms_tampered_2),
-                        tap_storage_tampered: (storage_tampered_2),
-                        tap_storage_rolledback: (storage_rolledback_2));
+                        tap_storage_tampered: (storage_tampered_2));
 
     //----------------------------------------------------------------------//
     // Helpers                                                              //
@@ -120,7 +117,7 @@ module integrity_proof {
       !valid_key(cpu_1.tap_kms_key[eid]);
     define kms_storage_key_sync() : boolean =
       (valid_key(cpu_1.tap_kms_key[eid]) &&
-        cpu_1.tap_storage_key[eid][fresh] == cpu_1.tap_kms_key[eid]);
+        cpu_1.tap_storage_key[eid] == cpu_1.tap_kms_key[eid]);
     // Guards for the phase automaton in integrity-proof-next.ucl.  They take the
     // post-state values as arguments because a `define` cannot mention primed
     // variables directly.
@@ -131,7 +128,7 @@ module integrity_proof {
 
     define kms_storage_tag_sync() : boolean =
       (valid_tag(cpu_1.tap_kms_tag[eid]) &&
-        cpu_1.tap_storage_tag[eid][fresh] == cpu_1.tap_kms_tag[eid]);
+        cpu_1.tap_storage_tag[eid] == cpu_1.tap_kms_tag[eid]);
 
     //----------------------------------------------------------------------//
     // TAP invariants                                                       //
@@ -558,7 +555,7 @@ module integrity_proof {
     invariant kms_tag_valid_2: (verif && already_stored()) ==> valid_tag(cpu_2.tap_kms_tag[eid]);
     invariant kms_tag_invalid_1: (verif && !already_stored()) ==> !valid_tag(cpu_1.tap_kms_tag[eid]);
     invariant kms_tag_invalid_2: (verif && !already_stored()) ==> !valid_tag(cpu_2.tap_kms_tag[eid]);
-    // invariant storage_key_invalid_2: (verif && !already_stored()) ==> !valid_key(cpu_2.tap_storage_key[eid][fresh]);
+    // invariant storage_key_invalid_2: (verif && !already_stored()) ==> !valid_key(cpu_2.tap_storage_key[eid]);
 
     //=============================================================================//
     // Storage/KMS/enclave invariants                                              //
@@ -570,41 +567,41 @@ module integrity_proof {
     // attempt as well as by the committed state, and this invariant is false.
     invariant storage_same_mem:
       (verif &&
-        cpu_1.tap_storage_tag[eid][fresh] == cpu_2.tap_storage_tag[eid][fresh]) ==>
-          (cpu_1.tap_storage_mem[eid][fresh] == cpu_2.tap_storage_mem[eid][fresh]);
+        cpu_1.tap_storage_tag[eid] == cpu_2.tap_storage_tag[eid]) ==>
+          (cpu_1.tap_storage_mem[eid] == cpu_2.tap_storage_mem[eid]);
     invariant storage_same_addr_valid:
       (verif &&
-        cpu_1.tap_storage_tag[eid][fresh] == cpu_2.tap_storage_tag[eid][fresh]) ==>
-          cpu_1.tap_storage_addr_valid[eid][fresh] == cpu_2.tap_storage_addr_valid[eid][fresh];
+        cpu_1.tap_storage_tag[eid] == cpu_2.tap_storage_tag[eid]) ==>
+          cpu_1.tap_storage_addr_valid[eid] == cpu_2.tap_storage_addr_valid[eid];
     // After first store, storage key shoud be equal to kms key
     invariant kms_storage_same_key_1:
       (verif && already_stored() && kms_storage_key_sync()) ==>
-        cpu_1.tap_storage_key[eid][fresh] == cpu_1.tap_kms_key[eid];
+        cpu_1.tap_storage_key[eid] == cpu_1.tap_kms_key[eid];
     invariant kms_storage_same_key_2:
       (verif && (already_stored() || phase == ph_pending)) ==>
-          cpu_2.tap_storage_key[eid][fresh] == cpu_2.tap_kms_key[eid];
+          cpu_2.tap_storage_key[eid] == cpu_2.tap_kms_key[eid];
     invariant kms_storage_same_tag_1:
       (verif && kms_storage_tag_sync()) ==>
         (valid_tag(cpu_1.tap_kms_tag[eid]) ==>
-          cpu_1.tap_storage_tag[eid][fresh] == cpu_1.tap_kms_tag[eid]);
+          cpu_1.tap_storage_tag[eid] == cpu_1.tap_kms_tag[eid]);
     // The reference trace's storage holds the committed ciphertext, except inside
     // the window, where it holds a write whose commit has not landed yet.  The
     // window is the only place the two can differ, because trace 2 discards an
     // uncommitted write as soon as the enclave that wrote it dies.
     invariant kms_storage_same_tag_2:
       (verif && phase != ph_pending && already_stored()) ==>
-        cpu_2.tap_storage_tag[eid][fresh] == cpu_2.tap_kms_tag[eid];
+        cpu_2.tap_storage_tag[eid] == cpu_2.tap_kms_tag[eid];
     // After first store, storage key and tag should be equal to enclave metadata key and tag
     // Outside the window, a storage tag that matches the KMS also matches the tag
     // the enclave is working with.  Inside the window it does not: the enclave has
     // moved one link ahead of the committed tag, which is the whole point of the
-    // window, so a rollback there can restore a ciphertext the enclave will not
+    // window, so a replay there can restore a ciphertext the enclave will not
     // accept.
     invariant enc_storage_same_tag_1:
       (verif && !enclave_dead && phase != ph_pending &&
         already_stored() && kms_storage_tag_sync()) ==>
         (valid_tag(cpu_1.tap_enclave_metadata_tag[eid]) ==>
-          cpu_1.tap_storage_tag[eid][fresh] == cpu_1.tap_enclave_metadata_tag[eid]);
+          cpu_1.tap_storage_tag[eid] == cpu_1.tap_enclave_metadata_tag[eid]);
     // The reference trace's stored ciphertext carries the tag the enclave is
     // working with: after a load or a commit because they agree by construction,
     // and inside the window because the store wrote both.  The bootstrap case is
@@ -613,7 +610,7 @@ module integrity_proof {
     invariant enc_storage_same_tag_2:
       (verif && !enclave_dead && key_fetched &&
         (phase == ph_pending || (phase == ph_active && already_stored()))) ==>
-        cpu_2.tap_storage_tag[eid][fresh] == cpu_2.tap_enclave_metadata_tag[eid];
+        cpu_2.tap_storage_tag[eid] == cpu_2.tap_enclave_metadata_tag[eid];
 
     //=============================================================================//
     // Content binding                                                             //
@@ -628,20 +625,12 @@ module integrity_proof {
     //=============================================================================//
     invariant fresh_binds_1:
       verif ==>
-        (cpu_1.tap_storage_mem[eid][fresh] == tag_mem(cpu_1.tap_storage_tag[eid][fresh]) &&
-          cpu_1.tap_storage_addr_valid[eid][fresh] == tag_valid_map(cpu_1.tap_storage_tag[eid][fresh]));
+        (cpu_1.tap_storage_mem[eid] == tag_mem(cpu_1.tap_storage_tag[eid]) &&
+          cpu_1.tap_storage_addr_valid[eid] == tag_valid_map(cpu_1.tap_storage_tag[eid]));
     invariant fresh_binds_2:
       verif ==>
-        (cpu_2.tap_storage_mem[eid][fresh] == tag_mem(cpu_2.tap_storage_tag[eid][fresh]) &&
-          cpu_2.tap_storage_addr_valid[eid][fresh] == tag_valid_map(cpu_2.tap_storage_tag[eid][fresh]));
-    invariant stale_binds_1:
-      verif ==>
-        (cpu_1.tap_storage_mem[eid][stale] == tag_mem(cpu_1.tap_storage_tag[eid][stale]) &&
-          cpu_1.tap_storage_addr_valid[eid][stale] == tag_valid_map(cpu_1.tap_storage_tag[eid][stale]));
-    invariant stale_binds_2:
-      verif ==>
-        (cpu_2.tap_storage_mem[eid][stale] == tag_mem(cpu_2.tap_storage_tag[eid][stale]) &&
-          cpu_2.tap_storage_addr_valid[eid][stale] == tag_valid_map(cpu_2.tap_storage_tag[eid][stale]));
+        (cpu_2.tap_storage_mem[eid] == tag_mem(cpu_2.tap_storage_tag[eid]) &&
+          cpu_2.tap_storage_addr_valid[eid] == tag_valid_map(cpu_2.tap_storage_tag[eid]));
     // (The archive-binding invariant is gone: a replay installs `tag_mem(t)`, so
     // `fresh_binds_1` holds by construction rather than by induction.)
 
@@ -698,14 +687,16 @@ module integrity_proof {
       (verif && !enclave_dead && key_fetched) ==>
         (cpu_1.tap_enclave_metadata_key[eid] == cpu_1.tap_kms_key[eid] ||
           kms_key_deleted() || !kms_storage_key_sync());
-    // In the window, the reference trace's `stale` slot is exactly the committed
-    // ciphertext.  This is what lets trace 2 discard an uncommitted write when the
-    // enclave dies: there is a well-formed committed ciphertext to go back to, and
-    // the rollback's own preconditions (same key, different tag) are met.
-    invariant pending_stale_2:
-      (verif && phase == ph_pending && already_stored()) ==>
-        (cpu_2.tap_storage_key[eid][stale] == cpu_2.tap_kms_key[eid] &&
-          cpu_2.tap_storage_tag[eid][stale] == cpu_2.tap_kms_tag[eid]);
+    // The committed ciphertext is always in the replay history.  This is what
+    // lets trace 2 discard an uncommitted write when the enclave dies: it can
+    // restore the committed state by replaying the tag the KMS holds.
+    invariant committed_produced_1:
+      (verif && already_stored()) ==> cpu_1.tap_storage_produced[eid][cpu_1.tap_kms_tag[eid]];
+    invariant committed_produced_2:
+      (verif && already_stored()) ==> cpu_2.tap_storage_produced[eid][cpu_2.tap_kms_tag[eid]];
+    invariant committed_produced_key_2:
+      (verif && already_stored()) ==>
+        cpu_2.tap_storage_produced_key[eid][cpu_2.tap_kms_tag[eid]] == cpu_2.tap_kms_key[eid];
     // Before the enclave fetches from the KMS it has no tag, so nothing it could
     // load would be accepted.
     invariant enc_tag_null_1:
@@ -717,13 +708,12 @@ module integrity_proof {
     // archive -- then the enclave is holding that same key.  `create_key` issues a
     // key unrelated to every key already in the system, archives included, and no
     // operation afterwards can reintroduce it: a store writes the key the enclave
-    // is holding, and rollback, replay and archive only move keys that are already
+    // is holding, and a replay only reinstates a key that is already
     // there.  This is what lets an aborting commit be attributed to a key that the
     // adversary deleted or replaced, rather than to the enclave getting out of step.
     invariant client_key_1:
       (verif && key_fetched && valid_key(cpu_1.tap_kms_key[eid])) ==>
-        ((cpu_1.tap_storage_key[eid][fresh] == cpu_1.tap_kms_key[eid] ||
-          cpu_1.tap_storage_key[eid][stale] == cpu_1.tap_kms_key[eid])
+        (cpu_1.tap_storage_key[eid] == cpu_1.tap_kms_key[eid]
           ==> cpu_1.tap_enclave_metadata_key[eid] == cpu_1.tap_kms_key[eid]);
     // Same statement for the replay history.  Stated as a universal over tags
     // rather than an existential in the antecedent, so that the solver gets a
@@ -744,12 +734,12 @@ module integrity_proof {
     invariant kms_storage_key_unsync:
       (verif && !kms_storage_key_sync()) ==>
         (valid_key(cpu_1.tap_kms_key[eid]) ==>
-          cpu_1.tap_storage_key[eid][fresh] != cpu_1.tap_kms_key[eid]);
+          cpu_1.tap_storage_key[eid] != cpu_1.tap_kms_key[eid]);
 
     invariant kms_storage_tag_unsync:
       (verif && !kms_storage_tag_sync()) ==>
         (valid_tag(cpu_1.tap_kms_tag[eid]) ==>
-          cpu_1.tap_storage_tag[eid][fresh] != cpu_1.tap_kms_tag[eid]);
+          cpu_1.tap_storage_tag[eid] != cpu_1.tap_kms_tag[eid]);
 
     //=============================================================================//
     // Flags for operation scheduling                                              //

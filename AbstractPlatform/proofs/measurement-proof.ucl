@@ -223,13 +223,13 @@ module measurement_proof {
     //----------------------------------------------------------------------//
     // Persistent storage invariants                                        //
     //----------------------------------------------------------------------//
-    // ensures (cpu_1.tap_storage_mem[eid_1][fresh] == cpu_2.tap_storage_mem[eid_2][fresh]);
-    // // ensures (cpu_1.tap_storage_size[eid_1][fresh] == cpu_2.tap_storage_size[eid_2][fresh]);
-    // ensures (cpu_1.tap_storage_addr_valid[eid_1][fresh] == cpu_2.tap_storage_addr_valid[eid_2][fresh]);
-    // ensures (cpu_1.tap_storage_key[eid_1][fresh] == cpu_1.tap_kms_key[eid_1] &&
-    //          cpu_2.tap_storage_key[eid_2][fresh] == cpu_2.tap_kms_key[eid_2]);
-    // ensures (cpu_1.tap_storage_tag[eid_1][fresh] == cpu_1.tap_kms_tag[eid_1] &&
-    //          cpu_2.tap_storage_tag[eid_2][fresh] == cpu_2.tap_kms_tag[eid_2]);
+    // ensures (cpu_1.tap_storage_mem[eid_1] == cpu_2.tap_storage_mem[eid_2]);
+    // // ensures (cpu_1.tap_storage_size[eid_1] == cpu_2.tap_storage_size[eid_2]);
+    // ensures (cpu_1.tap_storage_addr_valid[eid_1] == cpu_2.tap_storage_addr_valid[eid_2]);
+    // ensures (cpu_1.tap_storage_key[eid_1] == cpu_1.tap_kms_key[eid_1] &&
+    //          cpu_2.tap_storage_key[eid_2] == cpu_2.tap_kms_key[eid_2]);
+    // ensures (cpu_1.tap_storage_tag[eid_1] == cpu_1.tap_kms_tag[eid_1] &&
+    //          cpu_2.tap_storage_tag[eid_2] == cpu_2.tap_kms_tag[eid_2]);
 
     modifies cpu_1;
     modifies cpu_2;
@@ -308,10 +308,8 @@ module measurement_proof {
         // Initally tag in kms is null
         assume (!valid_tag(cpu_1.tap_kms_tag[eid_1]));
         // Initially storage is empty (both fresh and stale keys are invalid)
-        assume (!valid_key(cpu_1.tap_storage_key[eid_1][fresh]) &&
-                !valid_tag(cpu_1.tap_storage_tag[eid_1][fresh]) &&
-                !valid_key(cpu_1.tap_storage_key[eid_1][stale]) &&
-                !valid_tag(cpu_1.tap_storage_tag[eid_1][stale]));
+        assume (!valid_key(cpu_1.tap_storage_key[eid_1]) &&
+                !valid_tag(cpu_1.tap_storage_tag[eid_1]));
 
         // Repeat for second enclave.
         call (status_2) = cpu_2.launch(eid_2, e_addr_valid_2, e_addr_map_2, e_excl_vaddr_2, e_excl_map_2, e_entrypoint_2);
@@ -323,10 +321,8 @@ module measurement_proof {
         // Initally tag in kms is null
         assume (!valid_tag(cpu_1.tap_kms_tag[eid_2]));
         // Initially storage is empty (both fresh and stale keys are invalid)
-        assume (!valid_key(cpu_1.tap_storage_key[eid_2][fresh]) &&
-                !valid_tag(cpu_1.tap_storage_tag[eid_2][fresh]) &&
-                !valid_key(cpu_1.tap_storage_key[eid_2][stale]) &&
-                !valid_tag(cpu_1.tap_storage_tag[eid_2][stale]));
+        assume (!valid_key(cpu_1.tap_storage_key[eid_2]) &&
+                !valid_tag(cpu_1.tap_storage_tag[eid_2]));
       }
       // (create_op == create_by_clone) : {
       //   var r_parent_eid          : tap_enclave_id_t;
@@ -559,13 +555,13 @@ module measurement_proof {
     //----------------------------------------------------------------------//
     // Persistent storage invariants                                        //
     //----------------------------------------------------------------------//
-    // requires (cpu_1.tap_storage_mem[eid_1][fresh] == cpu_2.tap_storage_mem[eid_2][fresh]);
-    // // requires (cpu_1.tap_storage_size[eid_1][fresh] == cpu_2.tap_storage_size[eid_2][fresh]);
-    // requires (cpu_1.tap_storage_addr_valid[eid_1][fresh] == cpu_2.tap_storage_addr_valid[eid_2][fresh]);
-    // requires (cpu_1.tap_storage_key[eid_1][fresh] == cpu_1.tap_kms_key[eid_1] &&
-    //           cpu_2.tap_storage_key[eid_2][fresh] == cpu_2.tap_kms_key[eid_2]);
-    // requires (cpu_1.tap_storage_tag[eid_1][fresh] == cpu_1.tap_kms_tag[eid_1] &&
-    //           cpu_2.tap_storage_tag[eid_2][fresh] == cpu_2.tap_kms_tag[eid_2]);
+    // requires (cpu_1.tap_storage_mem[eid_1] == cpu_2.tap_storage_mem[eid_2]);
+    // // requires (cpu_1.tap_storage_size[eid_1] == cpu_2.tap_storage_size[eid_2]);
+    // requires (cpu_1.tap_storage_addr_valid[eid_1] == cpu_2.tap_storage_addr_valid[eid_2]);
+    // requires (cpu_1.tap_storage_key[eid_1] == cpu_1.tap_kms_key[eid_1] &&
+    //           cpu_2.tap_storage_key[eid_2] == cpu_2.tap_kms_key[eid_2]);
+    // requires (cpu_1.tap_storage_tag[eid_1] == cpu_1.tap_kms_tag[eid_1] &&
+    //           cpu_2.tap_storage_tag[eid_2] == cpu_2.tap_kms_tag[eid_2]);
 
     modifies cpu_1;
     modifies cpu_2;
@@ -795,19 +791,19 @@ module measurement_proof {
       // After first store, data stored should be the same
       invariant (already_stored ==>
                   (forall (v : vaddr_t) ::
-                    (cpu_1.tap_storage_addr_valid[eid_1][fresh][v] &&
-                      cpu_2.tap_storage_addr_valid[eid_2][fresh][v])
-                    ==> (cpu_1.tap_storage_mem[eid_1][fresh][v] == cpu_2.tap_storage_mem[eid_2][fresh][v])));
+                    (cpu_1.tap_storage_addr_valid[eid_1][v] &&
+                      cpu_2.tap_storage_addr_valid[eid_2][v])
+                    ==> (cpu_1.tap_storage_mem[eid_1][v] == cpu_2.tap_storage_mem[eid_2][v])));
       // After first store, addr_valid should be the same
-      invariant (already_stored ==> cpu_1.tap_storage_addr_valid[eid_1][fresh] == cpu_2.tap_storage_addr_valid[eid_2][fresh]);
+      invariant (already_stored ==> cpu_1.tap_storage_addr_valid[eid_1] == cpu_2.tap_storage_addr_valid[eid_2]);
       // After first store, storage key shoud be equal to kms key
-      invariant (already_stored ==> cpu_1.tap_storage_key[eid_1][fresh] == cpu_1.tap_kms_key[eid_1]);
-      invariant (already_stored ==> cpu_2.tap_storage_key[eid_2][fresh] == cpu_2.tap_kms_key[eid_2]);
+      invariant (already_stored ==> cpu_1.tap_storage_key[eid_1] == cpu_1.tap_kms_key[eid_1]);
+      invariant (already_stored ==> cpu_2.tap_storage_key[eid_2] == cpu_2.tap_kms_key[eid_2]);
       // After first store, storage key and tag should be equal to enclave metadata key and tag
-      invariant (already_stored ==> cpu_1.tap_storage_key[eid_1][fresh] == cpu_1.tap_enclave_metadata_key[eid_1]);
-      invariant (already_stored ==> cpu_2.tap_storage_key[eid_2][fresh] == cpu_2.tap_enclave_metadata_key[eid_2]);
-      invariant (already_stored ==> cpu_1.tap_storage_tag[eid_1][fresh] == cpu_1.tap_enclave_metadata_tag[eid_1]);
-      invariant (already_stored ==> cpu_2.tap_storage_tag[eid_2][fresh] == cpu_2.tap_enclave_metadata_tag[eid_2]);
+      invariant (already_stored ==> cpu_1.tap_storage_key[eid_1] == cpu_1.tap_enclave_metadata_key[eid_1]);
+      invariant (already_stored ==> cpu_2.tap_storage_key[eid_2] == cpu_2.tap_enclave_metadata_key[eid_2]);
+      invariant (already_stored ==> cpu_1.tap_storage_tag[eid_1] == cpu_1.tap_enclave_metadata_tag[eid_1]);
+      invariant (already_stored ==> cpu_2.tap_storage_tag[eid_2] == cpu_2.tap_enclave_metadata_tag[eid_2]);
 
       // Key and tag in enclave metadata should be the same as key and tag in KMS after they are retrieved
       invariant (key_and_tag_retrieved ==> cpu_1.tap_enclave_metadata_key[eid_1] == cpu_1.tap_kms_key[eid_1]);
@@ -827,8 +823,8 @@ module measurement_proof {
       invariant (kms_tag_updated ==> cpu_1.tap_kms_tag[eid_1] == cpu_1.tap_enclave_metadata_tag[eid_1]);
       invariant (kms_tag_updated ==> cpu_2.tap_kms_tag[eid_2] == cpu_2.tap_enclave_metadata_tag[eid_2]);
       // After update tag, tag in storage should be the same as tag in KMS
-      invariant (kms_tag_updated ==> cpu_1.tap_storage_tag[eid_1][fresh] == cpu_1.tap_kms_tag[eid_1]);
-      invariant (kms_tag_updated ==> cpu_2.tap_storage_tag[eid_2][fresh] == cpu_2.tap_kms_tag[eid_2]);
+      invariant (kms_tag_updated ==> cpu_1.tap_storage_tag[eid_1] == cpu_1.tap_kms_tag[eid_1]);
+      invariant (kms_tag_updated ==> cpu_2.tap_storage_tag[eid_2] == cpu_2.tap_kms_tag[eid_2]);
 
       // Between the store and the commit, the tag the enclave is about to commit
       // chains directly from the one the KMS currently holds.  The KMS performs a
