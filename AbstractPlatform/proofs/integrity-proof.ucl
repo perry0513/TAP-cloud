@@ -690,6 +690,17 @@ module integrity_proof {
     // The committed ciphertext is always in the replay history.  This is what
     // lets trace 2 discard an uncommitted write when the enclave dies: it can
     // restore the committed state by replaying the tag the KMS holds.
+    // In the window, the tag the enclave is about to commit is already in the
+    // replay history -- the store that produced it recorded it.  This is what
+    // carries `committed_produced_*` across the commit.
+    invariant pending_produced_1:
+      (verif && !enclave_dead && phase == ph_pending) ==>
+        cpu_1.tap_storage_produced[eid][cpu_1.tap_enclave_metadata_tag[eid]];
+    invariant pending_produced_2:
+      (verif && !enclave_dead && phase == ph_pending) ==>
+        (cpu_2.tap_storage_produced[eid][cpu_2.tap_enclave_metadata_tag[eid]] &&
+          cpu_2.tap_storage_produced_key[eid][cpu_2.tap_enclave_metadata_tag[eid]] ==
+            cpu_2.tap_kms_key[eid]);
     invariant committed_produced_1:
       (verif && already_stored()) ==> cpu_1.tap_storage_produced[eid][cpu_1.tap_kms_tag[eid]];
     invariant committed_produced_2:
