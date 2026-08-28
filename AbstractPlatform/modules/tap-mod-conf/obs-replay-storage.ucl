@@ -50,23 +50,12 @@ module tap {
     //              tap_enclave_metadata_valid == old(tap_enclave_metadata_valid) &&
     //              tap_enclave_metadata_addr_excl == old(tap_enclave_metadata_addr_excl));
 
-    modifies cpu_regs;
-    modifies cpu_pc;
-    modifies cpu_addr_valid;
-    modifies cache_valid_map;
-    modifies cache_tag_map;
-    modifies tap_enclave_metadata_addr_valid;
-    modifies tap_storage_mem;
-    modifies tap_storage_addr_valid;
-    modifies tap_storage_key;
-    modifies tap_storage_tag;
-    modifies tap_storage_produced;
-    modifies tap_storage_produced_key;
-    modifies tap_enclave_metadata_key;
-    modifies tap_enclave_metadata_tag;
-    modifies tap_kms_tag;
+   modifies tap_storage_mem;
+   modifies tap_storage_addr_valid;
+   modifies tap_storage_key;
+   modifies tap_storage_tag;
   {
-    var abort : boolean;
+    var r_replay_tag : tag_t;
 
     // "default" for the next mode.
     next_mode = mode;
@@ -83,14 +72,13 @@ module tap {
     hit_1 = false;
     hit_2 = false;
 
-    // in enclave-mode:
-    assume (op == tap_proof_op_store_storage);
+    assume (op == tap_proof_op_replay_storage);
 
-    call (status, abort) = store_storage();
-    // if (status == enclave_op_success) {
-    //   // If success, overwrite the fresh entry so it is no longer tampered
-    //   storage_tampered = false;
-    // }
+    // Which produced ciphertext the adversary writes back.  The two traces are
+    // held to the same choice by an assumption in mem-conf-proof.ucl, in the
+    // same way as they are for tamperPS.
+    havoc r_replay_tag;
+    call (status) = replay_storage(r_eid, r_replay_tag);
   }
 
   //======================================================================//

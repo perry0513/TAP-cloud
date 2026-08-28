@@ -19,6 +19,8 @@ module tap {
     modifies tap_storage_addr_valid;
     modifies tap_storage_key;
     modifies tap_storage_tag;
+    modifies tap_storage_produced;
+    modifies tap_storage_produced_key;
     modifies tap_enclave_metadata_key;
     modifies tap_enclave_metadata_tag;
     modifies tap_kms_tag;
@@ -30,7 +32,7 @@ module tap {
     // in enclave-mode:
     assume (op == tap_proof_op_store_storage);
 
-    call (status, abort) = store_storage();
+    call (status, abort) = store_storage_only();
     if (status == enclave_op_success) {
       // If success, overwrite the fresh entry so it is no longer tampered
       storage_tampered = false;

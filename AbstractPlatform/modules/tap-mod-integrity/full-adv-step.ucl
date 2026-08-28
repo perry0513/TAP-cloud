@@ -43,6 +43,8 @@ module tap {
     modifies tap_storage_addr_valid;
     modifies tap_storage_key;
     modifies tap_storage_tag;
+    modifies tap_storage_produced;
+    modifies tap_storage_produced_key;
     modifies tap_kms_key;
     modifies tap_kms_tag;
     modifies tap_kms_tampered;
@@ -65,6 +67,7 @@ module tap {
     var hit               : boolean;
     var way               : cache_way_index_t;
     var abort             : boolean;
+    var r_replay_tag      : tag_t;
 
     // the "default" value which may be overwritten by enter/resume
     next_mode = mode;
@@ -191,6 +194,13 @@ module tap {
     }
     (op == tap_proof_op_rollback_storage) : {
       call (status) = rollback_storage(r_eid);
+      if (r_eid == eid && status == enclave_op_success) {
+        tap_storage_tampered = true;
+      }
+    }
+    (op == tap_proof_op_replay_storage) : {
+      havoc r_replay_tag;
+      call (status) = replay_storage(r_eid, r_replay_tag);
       if (r_eid == eid && status == enclave_op_success) {
         tap_storage_tampered = true;
       }

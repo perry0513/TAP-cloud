@@ -19,6 +19,8 @@ module tap {
     modifies tap_storage_addr_valid;
     modifies tap_storage_key;
     modifies tap_storage_tag;
+    modifies tap_storage_produced;
+    modifies tap_storage_produced_key;
     modifies tap_enclave_metadata_key;
     modifies tap_enclave_metadata_tag;
     modifies tap_kms_tag;

@@ -5,6 +5,19 @@ const * = ap_types.*;
 function * = ap_types.*;
 define * = ap_types.*;
 
+// The phase of the enclave's session, i.e. where the enclave has got to in the
+// program `getKeyTag . loadPS . (compute* . storePS . updateTag)*`.
+//
+//   ph_syncing  -- relaunched, has not yet re-established its committed state
+//   ph_active   -- holds the committed state (possibly plus local computation)
+//   ph_pending  -- has written a ciphertext that is not yet committed
+//   ph_dead     -- destroyed
+//
+// This is the operational counterpart of the labelling function: `ph_syncing`
+// steps are the ones the labelling sends to bottom, `ph_active` steps carry
+// (x, y), and the transition out of `ph_pending` is the commit that increments
+// x.
+type phase_t = enum { ph_syncing, ph_active, ph_pending, ph_dead };
 
 define tap_proof_op_valid(o : tap_proof_op_t) : boolean
 = (o == tap_proof_op_compute)   ||
@@ -15,16 +28,22 @@ define tap_proof_op_valid(o : tap_proof_op_t) : boolean
   (o == tap_proof_op_create_key) || (o == tap_proof_op_delete_key)  ||
   (o == tap_proof_op_load_storage) || (o == tap_proof_op_store_storage) ||
   (o == tap_proof_op_tamper_storage) || (o == tap_proof_op_rollback_storage) ||
+  (o == tap_proof_op_replay_storage) ||
   (o == tap_proof_op_release)   || (o == tap_proof_op_block);
 
+// The enclave's own instruction set.  `store_storage` and `load_storage` now
+// name the *granular* operations (encrypt-and-write, read-and-decrypt); the
+// calls into the KMS are separate steps, so the window between writing a
+// ciphertext and committing its tag is part of the model rather than assumed
+// away.
 define tap_proof_op_valid_in_enclave(o : tap_proof_op_t) : boolean
 = (o == tap_proof_op_compute)   ||
   (o == tap_proof_op_pause)     ||
   // (o == tap_proof_op_snapshot)  ||
   (o == tap_proof_op_load_storage) ||
   (o == tap_proof_op_store_storage) ||
-  // (o == tap_proof_op_get_key_and_tag) ||
-  // (o == tap_proof_op_update_tag) ||
+  (o == tap_proof_op_get_key_and_tag) ||
+  (o == tap_proof_op_update_tag) ||
   (o == tap_proof_op_exit);
 
 }
