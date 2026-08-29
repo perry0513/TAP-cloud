@@ -35,7 +35,7 @@ module integrity_proof {
     assume (e_proof_op == tap_proof_op_get_key_and_tag ==>
               (phase == ph_syncing && !key_fetched));
     assume (e_proof_op == tap_proof_op_load_storage ==>
-              (phase == ph_syncing && key_fetched && already_stored()));
+              (phase == ph_syncing && key_fetched && already_committed()));
     assume (e_proof_op == tap_proof_op_compute ==> (phase == ph_active));
     assume (e_proof_op == tap_proof_op_store_storage ==> (phase == ph_active));
     assume (e_proof_op == tap_proof_op_update_tag ==> (phase == ph_pending));
@@ -101,7 +101,7 @@ module integrity_proof {
     storage_tampered' = storage_tampered_1';
     status' = status_1';
 
-    // `already_stored`, `kms_key_deleted`, `kms_storage_key_sync` and
+    // `already_committed`, `kms_key_deleted`, `kms_storage_key_sync` and
     // `kms_storage_tag_sync` need no update here: they are macros over trace 1's
     // state (see integrity-proof.ucl) and so track it automatically.
 
@@ -117,34 +117,39 @@ module integrity_proof {
     // destroy                   -> ph_dead                                        //
     //                                                                            //
     //---------------------------------------------------------------------------//
+    // `enc_step_ok` requires mode_enclave and `adv_step_ok` requires
+    // mode_untrusted, and both are passed the same `current_mode`, so the two
+    // arms are mutually exclusive and hoisting them out is equivalence-
+    // preserving.
+    //
+    // `already_committed()` in the getKeyTag arm reads the KMS tag, which
+    // getKeyTag does not write (it copies KMS -> enclave; only updateTag writes
+    // the KMS side), so the unprimed value is the post-state value.  Nothing has
+    // ever been committed => there is nothing to load => skip straight to
+    // ph_active.  Going to ph_syncing there would deadlock: loadPS needs
+    // `already_committed()` and compute/storePS need ph_active.
     phase' =
-      if (enc_step_ok(status_1', enclave_abort_1', current_mode) &&
-          e_proof_op == tap_proof_op_get_key_and_tag)
-        then (if (valid_tag(cpu_1.tap_kms_tag[eid])) then ph_syncing else ph_active)
-      else if (enc_step_ok(status_1', enclave_abort_1', current_mode) &&
-               e_proof_op == tap_proof_op_load_storage)
-        then ph_active
-      else if (enc_step_ok(status_1', enclave_abort_1', current_mode) &&
-               e_proof_op == tap_proof_op_store_storage)
-        then ph_pending
-      else if (enc_step_ok(status_1', enclave_abort_1', current_mode) &&
-               e_proof_op == tap_proof_op_update_tag)
-        then ph_active
-      else if (adv_step_ok(status_1', current_mode, r_eid, eid) &&
-               r_proof_op == tap_proof_op_launch)
-        then ph_syncing
-      else if (adv_step_ok(status_1', current_mode, r_eid, eid) &&
-               r_proof_op == tap_proof_op_destroy)
-        then ph_dead
+      if (enc_step_ok(status_1', enclave_abort_1', current_mode)) then (
+             if      (e_proof_op == tap_proof_op_get_key_and_tag)
+               then (if (already_committed()) then ph_syncing else ph_active)
+             else if (e_proof_op == tap_proof_op_load_storage)  then ph_active
+             else if (e_proof_op == tap_proof_op_store_storage) then ph_pending
+             else if (e_proof_op == tap_proof_op_update_tag)    then ph_active
+             else phase)
+      else if (adv_step_ok(status_1', current_mode, r_eid, eid)) then (
+             if      (r_proof_op == tap_proof_op_launch)  then ph_syncing
+             else if (r_proof_op == tap_proof_op_destroy) then ph_dead
+             else phase)
       else phase;
 
     key_fetched' =
-      if (enc_step_ok(status_1', enclave_abort_1', current_mode) &&
-          e_proof_op == tap_proof_op_get_key_and_tag)
-        then true
-      else if (adv_step_ok(status_1', current_mode, r_eid, eid) &&
-               (r_proof_op == tap_proof_op_launch || r_proof_op == tap_proof_op_destroy))
-        then false
+      if (enc_step_ok(status_1', enclave_abort_1', current_mode)) then (
+             if (e_proof_op == tap_proof_op_get_key_and_tag) then true
+             else key_fetched)
+      else if (adv_step_ok(status_1', current_mode, r_eid, eid)) then (
+             if (r_proof_op == tap_proof_op_launch ||
+                 r_proof_op == tap_proof_op_destroy) then false
+             else key_fetched)
       else key_fetched;
 
   }

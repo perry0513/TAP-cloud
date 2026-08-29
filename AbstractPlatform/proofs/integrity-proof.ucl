@@ -111,7 +111,12 @@ module integrity_proof {
     // instead: splitting storePS from updateTag moves the point at which storage
     // and the KMS agree, and hand-maintained flags are exactly what goes stale
     // when that happens.
-    define already_stored() : boolean =
+    // True once at least one commit has landed.  Named for `updateTag`, not for
+    // `storePS`: the KMS tag is the only thing this reads, and only `updateTag`
+    // moves it.  During the pending window the enclave has stored but this still
+    // reflects the *previous* commit, which is exactly the distinction the
+    // un-fused model exists to make.
+    define already_committed() : boolean =
       valid_tag(cpu_1.tap_kms_tag[eid]);
     define kms_key_deleted() : boolean =
       !valid_key(cpu_1.tap_kms_key[eid]);
@@ -551,11 +556,11 @@ module integrity_proof {
     //=============================================================================//
     invariant kms_key_valid_1: (verif && !kms_tampered_1) ==> valid_key(cpu_1.tap_kms_key[eid]);
     invariant kms_key_valid_2: verif ==> valid_key(cpu_2.tap_kms_key[eid]);
-    invariant kms_tag_valid_1: (verif && already_stored()) ==> valid_tag(cpu_1.tap_kms_tag[eid]);
-    invariant kms_tag_valid_2: (verif && already_stored()) ==> valid_tag(cpu_2.tap_kms_tag[eid]);
-    invariant kms_tag_invalid_1: (verif && !already_stored()) ==> !valid_tag(cpu_1.tap_kms_tag[eid]);
-    invariant kms_tag_invalid_2: (verif && !already_stored()) ==> !valid_tag(cpu_2.tap_kms_tag[eid]);
-    // invariant storage_key_invalid_2: (verif && !already_stored()) ==> !valid_key(cpu_2.tap_storage_key[eid]);
+    invariant kms_tag_valid_1: (verif && already_committed()) ==> valid_tag(cpu_1.tap_kms_tag[eid]);
+    invariant kms_tag_valid_2: (verif && already_committed()) ==> valid_tag(cpu_2.tap_kms_tag[eid]);
+    invariant kms_tag_invalid_1: (verif && !already_committed()) ==> !valid_tag(cpu_1.tap_kms_tag[eid]);
+    invariant kms_tag_invalid_2: (verif && !already_committed()) ==> !valid_tag(cpu_2.tap_kms_tag[eid]);
+    // invariant storage_key_invalid_2: (verif && !already_committed()) ==> !valid_key(cpu_2.tap_storage_key[eid]);
 
     //=============================================================================//
     // Storage/KMS/enclave invariants                                              //
@@ -575,10 +580,10 @@ module integrity_proof {
           cpu_1.tap_storage_addr_valid[eid] == cpu_2.tap_storage_addr_valid[eid];
     // After first store, storage key shoud be equal to kms key
     invariant kms_storage_same_key_1:
-      (verif && already_stored() && kms_storage_key_sync()) ==>
+      (verif && already_committed() && kms_storage_key_sync()) ==>
         cpu_1.tap_storage_key[eid] == cpu_1.tap_kms_key[eid];
     invariant kms_storage_same_key_2:
-      (verif && (already_stored() || phase == ph_pending)) ==>
+      (verif && (already_committed() || phase == ph_pending)) ==>
           cpu_2.tap_storage_key[eid] == cpu_2.tap_kms_key[eid];
     invariant kms_storage_same_tag_1:
       (verif && kms_storage_tag_sync()) ==>
@@ -589,7 +594,7 @@ module integrity_proof {
     // window is the only place the two can differ, because trace 2 discards an
     // uncommitted write as soon as the enclave that wrote it dies.
     invariant kms_storage_same_tag_2:
-      (verif && phase != ph_pending && already_stored()) ==>
+      (verif && phase != ph_pending && already_committed()) ==>
         cpu_2.tap_storage_tag[eid] == cpu_2.tap_kms_tag[eid];
     // After first store, storage key and tag should be equal to enclave metadata key and tag
     // Outside the window, a storage tag that matches the KMS also matches the tag
@@ -599,7 +604,7 @@ module integrity_proof {
     // accept.
     invariant enc_storage_same_tag_1:
       (verif && !enclave_dead && phase != ph_pending &&
-        already_stored() && kms_storage_tag_sync()) ==>
+        already_committed() && kms_storage_tag_sync()) ==>
         (valid_tag(cpu_1.tap_enclave_metadata_tag[eid]) ==>
           cpu_1.tap_storage_tag[eid] == cpu_1.tap_enclave_metadata_tag[eid]);
     // The reference trace's stored ciphertext carries the tag the enclave is
@@ -609,7 +614,7 @@ module integrity_proof {
     // a ciphertext from a session that died before its first commit.
     invariant enc_storage_same_tag_2:
       (verif && !enclave_dead && key_fetched &&
-        (phase == ph_pending || (phase == ph_active && already_stored()))) ==>
+        (phase == ph_pending || (phase == ph_active && already_committed()))) ==>
         cpu_2.tap_storage_tag[eid] == cpu_2.tap_enclave_metadata_tag[eid];
 
     //=============================================================================//
@@ -702,11 +707,11 @@ module integrity_proof {
           cpu_2.tap_storage_produced_key[eid][cpu_2.tap_enclave_metadata_tag[eid]] ==
             cpu_2.tap_kms_key[eid]);
     invariant committed_produced_1:
-      (verif && already_stored()) ==> cpu_1.tap_storage_produced[eid][cpu_1.tap_kms_tag[eid]];
+      (verif && already_committed()) ==> cpu_1.tap_storage_produced[eid][cpu_1.tap_kms_tag[eid]];
     invariant committed_produced_2:
-      (verif && already_stored()) ==> cpu_2.tap_storage_produced[eid][cpu_2.tap_kms_tag[eid]];
+      (verif && already_committed()) ==> cpu_2.tap_storage_produced[eid][cpu_2.tap_kms_tag[eid]];
     invariant committed_produced_key_2:
-      (verif && already_stored()) ==>
+      (verif && already_committed()) ==>
         cpu_2.tap_storage_produced_key[eid][cpu_2.tap_kms_tag[eid]] == cpu_2.tap_kms_key[eid];
     // Before the enclave fetches from the KMS it has no tag, so nothing it could
     // load would be accepted.
@@ -761,7 +766,7 @@ module integrity_proof {
     // which the un-fused model makes false: `storePS` writes a ciphertext under
     // the client key before any `updateTag` has ever succeeded.)
     invariant possible_states:
-      verif ==> (kms_storage_tag_sync() ==> already_stored());
+      verif ==> (kms_storage_tag_sync() ==> already_committed());
 
     // The phase automaton agrees with the platform state it is meant to track.
     invariant phase_dead_iff:
@@ -777,7 +782,7 @@ module integrity_proof {
     // A bootstrapping enclave (nothing committed yet) is never in `ph_syncing`
     // once it has its key: there is nothing to load.
     invariant bootstrap_active:
-      (verif && !enclave_dead && !already_stored() && key_fetched) ==>
+      (verif && !enclave_dead && !already_committed() && key_fetched) ==>
         (phase == ph_active || phase == ph_pending);
 
     //=============================================================================//

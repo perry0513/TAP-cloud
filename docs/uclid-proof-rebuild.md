@@ -81,7 +81,7 @@ form of the session grammar:
 
 ```
 getKeyTag  requires  ph_syncing && !key_fetched
-loadPS     requires  ph_syncing && key_fetched && already_stored
+loadPS     requires  ph_syncing && key_fetched && already_committed
 compute    requires  ph_active
 storePS    requires  ph_active
 updateTag  requires  ph_pending
@@ -91,7 +91,7 @@ updateTag  requires  ph_pending
 tag abandons a pending store just as a crash does, and that is the crash-free
 variant of the tag-reuse attack.
 
-`already_stored`, `kms_key_deleted`, `kms_storage_key_sync` and
+`already_committed`, `kms_key_deleted`, `kms_storage_key_sync` and
 `kms_storage_tag_sync` stopped being ghosts and became macros over trace 1's
 state. Splitting one operation into two moves the point at which storage and
 the KMS agree, and hand-maintained flags are exactly what goes stale when that
@@ -111,7 +111,7 @@ happens.
   window only.
 - **`storage_same_mem` / `storage_same_addr_valid`** -- re-stated as consequences
   of tag equality, which is what content binding actually buys. Under the old
-  guard (`already_stored && kms_storage_tag_sync`) they are false, because a
+  guard (`already_committed && kms_storage_tag_sync`) they are false, because a
   replay of the committed ciphertext during the window satisfies the guard while
   the two traces hold different ciphertexts.
 
@@ -362,7 +362,59 @@ and `adv-enter` verifies, with `enter(r_eid)` for `r_eid != eid` leaving
 argument, not a witness. A positive witness needs a bounded model check, which
 is not built here -- the same gap noted in §11.
 
-### 12.5 What is complete
+### 12.5 `already_stored` renamed, and a tautological invariant found
+
+`already_stored()` is `valid_tag(cpu_1.tap_kms_tag[eid])`, and only `updateTag`
+moves the KMS tag.  In the un-fused model "stored" names the wrong event: during
+the pending window the enclave *has* stored, but the macro still reflects the
+previous commit.  Renamed to **`already_committed()`**.
+
+(`measurement-proof.ucl` has an unrelated local ghost variable also called
+`already_stored`, in a different module.  Left alone.)
+
+The phase automaton and `key_fetched'` are regrouped enclave-arm / adversary-arm.
+`enc_step_ok` requires `mode_enclave` and `adv_step_ok` requires
+`mode_untrusted`, and both take the same `current_mode`, so the arms are
+mutually exclusive and hoisting them is equivalence-preserving.  Confirmed
+empirically: all 24 integrity splits produce byte-identical per-target
+obligation counts before and after.
+
+**A defect this exposed.**  `kms_storage_same_tag_1` is a tautology:
+
+    define kms_storage_tag_sync() =
+      valid_tag(kms_tag) && storage_tag == kms_tag;
+
+    invariant kms_storage_same_tag_1:
+      (verif && kms_storage_tag_sync()) ==>
+        (valid_tag(kms_tag) ==> storage_tag == kms_tag);
+
+which is `(A and B) => (A => B)`.  It holds in any model and constrains nothing.
+
+It was not always so.  The original read
+
+    (verif && kms_tag_updated && !kms_tampered && !storage_tampered &&
+     !storage_rolledback) ==> storage_tag[fresh] == kms_tag
+
+-- guarded by *adversary-action flags*, so it genuinely excluded interference.
+Converting the hand-maintained flags to macros (§ on `already_committed`)
+substituted the conclusion into its own antecedent.  Sound, but empty; nothing
+downstream can depend on it, which is why the proof still passes.
+
+`enc_storage_same_tag_1` inherited the same substitution but is **not**
+vacuous -- its guard is on `kms_tag` while its conclusion is on
+`enclave_metadata_tag`, so it still claims the third leg of the triangle.
+
+Not yet repaired.  The meaningful trace-1 form would be the analogue of
+`kms_storage_same_tag_2` with the adversary guards restored:
+
+    (verif && !storage_tampered && !kms_tampered &&
+     phase != ph_pending && already_committed()) ==>
+       cpu_1.tap_storage_tag[eid] == cpu_1.tap_kms_tag[eid]
+
+`replay_storage` sets `tap_storage_tampered`, so replay falls under the same
+guard.  Whether it is provable is an open empirical question.
+
+### 12.6 What is complete
 
 Checked mechanically, enum against dispatch table against Makefile:
 
