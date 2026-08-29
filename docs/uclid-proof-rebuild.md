@@ -250,6 +250,136 @@ without content binding, on the property that carries the security guarantee. It
 is not a reachability witness for the attack: that would need a bounded model
 check, which is not built here.
 
+## 12. Operation-coverage audit
+
+Three gaps in *which* operations the proof actually exercises, all found by
+reading the dispatch tables against the op enums rather than by a failing
+obligation. None of them made a proved theorem false; all of them made the
+adversary weaker than the model claims.
+
+### 12.1 `InitialHavoc` did not dispatch `replayPS`
+
+`InitialHavoc` is the arbitrary pre-history the adversary is allowed to have run
+before the proof starts watching. It dispatched every other storage and KMS
+operation but not `replayPS`.
+
+This is **not** a soundness hole. UCLID's induction step quantifies over all
+states satisfying the invariants, not over states reachable from `InitialHavoc`,
+so the replay *transition* was fully checked by the `adv-replay` case split all
+along. What it broke is base-case coverage: the initial states considered
+excluded every state the adversary could only have reached by replaying.
+
+Fixed. Vacuity probe on the new branch (`assert (status == enclave_op_success
+==> false)`): 10 obligations, none refuted, so the branch is live.
+
+### 12.2 `Block` and `Release` were absent from `tap_op_t`
+
+`tap_op_t` is the operation alphabet of `InitialHavoc`, and it is a *different*
+enum from `tap_proof_op_t`, the alphabet of the transition relation. `Block` and
+`Release` were in the second but not the first, so no reachable initial state
+had any blocked page: `cpu_owner_map[pa] == tap_blocked_enc_id` was vacuously
+false everywhere at the start of every proof. Same class of gap as 12.1.
+
+Both added to `tap_op_t` and dispatched in `InitialHavoc`. The loop invariants
+survive because the two operations move ownership only between
+`tap_null_enc_id` and `tap_blocked_enc_id`, and every invariant that pins a
+page to an enclave is guarded by `valid_enclave_id(cpu_enclave_id)`.
+
+### 12.3 The adversary did not have the enclave's instruction set
+
+This is the substantive one.
+
+`enter(r_eid)` with `r_eid != eid` **succeeds** and leaves
+`cpu_enclave_id == r_eid` while the proof stays in `mode_untrusted` -- only
+`r_eid == eid` flips `next_mode` to `mode_enclave`. So during an "untrusted"
+step the adversary can be executing inside an enclave of its own. That is
+intended: the adversary owns the platform and may launch enclaves on it.
+
+But the adversary's storage operations were the **fused** `store_storage` and
+`load_storage`, which are `get_key_and_tag; store_only; update_tag` executed as
+one transition, while `get_key_and_tag` and `update_tag` were missing from
+`tap_proof_op_valid` entirely. Two consequences:
+
+- Assumption A1 -- that writing a ciphertext and committing its tag are atomic
+  -- was silently imposed on adversary-owned enclaves. The pending window
+  (ciphertext written, tag not yet committed) was unreachable for them.
+- The two dead branches in `IntegrityAdversarialStep` that dispatched
+  `get_key_and_tag` / `update_tag` were unreachable, excluded by the axiom on
+  `tap_proof_op_valid`.
+
+The direction of the error is "adversary too weak", so no proved theorem was
+false. But the whole point of the granular ops is that the pending window is
+part of the model rather than assumed away, and the adversary was exempt from
+it.
+
+Fixed by making the adversary's instruction set equal to the enclave's:
+
+- `tap_proof_op_valid` gains `tap_proof_op_get_key_and_tag` and
+  `tap_proof_op_update_tag`.
+- `adv-store-storage.ucl`, `adv-load-storage.ucl`, `obs-store-storage.ucl`,
+  `obs-load-storage.ucl` and `full-adv-step.ucl` call the `_only` forms.
+- New case splits `adv-get-key-and-tag.ucl`, `adv-update-tag.ucl`,
+  `obs-get-key-and-tag.ucl`, `obs-update-tag.ucl`, with Makefile targets.
+- `full-obs-step.ucl` had no storage or KMS branches at all; it now mirrors
+  `full-adv-step.ucl`. It is dead in the case-split builds, but it backs the
+  monolithic `make integrity` / `make mem-conf` targets.
+
+### 12.4 Vacuity of the new adversary splits: not established
+
+The `ReplayStorage` branch of §12.1 probes cleanly (10 obligations, none
+refuted, so it is live). The four new adversary/observer splits do **not**.
+
+Probing `assert (status == enclave_op_success ==> false)` after the call in
+`adv-get-key-and-tag`, `adv-update-tag`, `adv-store-storage`,
+`obs-get-key-and-tag` and `obs-update-tag` yields two obligations each, one per
+trace. Results:
+
+- one obligation comes back `unsat`, which is *expected and correct*: `inv38`
+  pins `cpu_2.cpu_enclave_id == tap_null_enc_id` in untrusted mode, so trace 2
+  can never succeed at an enclave instruction during an adversary step;
+- the other -- trace 1's -- comes back **`unknown`**, at 30 s and still at
+  600 s. A simplified probe (`valid_enclave_id(cpu_enclave_id) &&
+  tap_enclave_metadata_valid[cpu_enclave_id] ==> false`, placed before the call
+  so it does not depend on the procedure's postcondition) returns `unknown`
+  too.
+
+So liveness of these branches is **undecided**, and under the standing rule
+that `unknown` counts as failure it must be reported as not established, not as
+live.
+
+What *is* established:
+
+- the splits are not globally vacuous -- contradictory assumptions would make
+  every obligation trivially `unsat`, and the counts (244 each) and solve times
+  are in line with the neighbouring splits;
+- nothing unsound follows either way: a vacuous case split proves nothing but
+  breaks nothing. The risk is that the §12.3 fix is *inert* rather than wrong.
+
+The structural argument that they are live: no axiom constrains `r_eid`;
+`inv37` forbids only `cpu_1.cpu_enclave_id == eid`, not a non-`eid` enclave;
+and `adv-enter` verifies, with `enter(r_eid)` for `r_eid != eid` leaving
+`next_mode == mode_untrusted` and `cpu_enclave_id == r_eid`. That is an
+argument, not a witness. A positive witness needs a bounded model check, which
+is not built here -- the same gap noted in §11.
+
+### 12.5 What is complete
+
+Checked mechanically, enum against dispatch table against Makefile:
+
+| | |
+|---|---|
+| `tap_proof_op_valid` (17 adversary ops) vs `adv-*` / `obs-*` case splits | all present, all run |
+| `tap_proof_op_valid_in_enclave` (7 enclave ops) vs `e-*` / `enc-*` splits | all present, all run |
+| `tap_op_t` vs `InitialHavoc` dispatch | complete after 12.1, 12.2 |
+| module `verify()` list vs live procedures | complete |
+
+Deliberately excluded: `transfer_key_and_tag` is in `tap_proof_op_t` with a
+verified contract but is in neither valid-op set and is dispatched nowhere.
+
+Dead weight, pre-existing, left alone: `adv-clone`, `adv-snapshot`,
+`obs-clone`, `obs-snapshot`, `e-snapshot` reference enum values that are
+commented out, and their Makefile targets are commented out too.
+
 ---
 
 # Appendix — replacing the archive with an unbounded replay history
