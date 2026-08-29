@@ -585,10 +585,14 @@ module integrity_proof {
     invariant kms_storage_same_key_2:
       (verif && (already_committed() || phase == ph_pending)) ==>
           cpu_2.tap_storage_key[eid] == cpu_2.tap_kms_key[eid];
-    invariant kms_storage_same_tag_1:
-      (verif && kms_storage_tag_sync()) ==>
-        (valid_tag(cpu_1.tap_kms_tag[eid]) ==>
-          cpu_1.tap_storage_tag[eid] == cpu_1.tap_kms_tag[eid]);
+    // kms_storage_same_tag_1 removed: it had become the tautology
+    // `(A and B) => (A => B)`.  Its original form was guarded by the adversary
+    // flags (!kms_tampered && !storage_tampered && !storage_rolledback) and so
+    // said something real; converting those ghost flags into macros over trace
+    // 1's state substituted the conclusion into its own antecedent.  Trace 1 has
+    // no unconditional storage/KMS tag agreement to state -- the adversary can
+    // tamper or replay it -- so the content is carried by the content-binding
+    // invariants and `storage_same_mem` instead.
     // The reference trace's storage holds the committed ciphertext, except inside
     // the window, where it holds a write whose commit has not landed yet.  The
     // window is the only place the two can differ, because trace 2 discards an
@@ -713,12 +717,6 @@ module integrity_proof {
     invariant committed_produced_key_2:
       (verif && already_committed()) ==>
         cpu_2.tap_storage_produced_key[eid][cpu_2.tap_kms_tag[eid]] == cpu_2.tap_kms_key[eid];
-    // Before the enclave fetches from the KMS it has no tag, so nothing it could
-    // load would be accepted.
-    invariant enc_tag_null_1:
-      (verif && !key_fetched) ==>
-        (!valid_tag(cpu_1.tap_enclave_metadata_tag[eid]) &&
-          !valid_tag(cpu_2.tap_enclave_metadata_tag[eid]));
     // Where the client key can be.  If the key the KMS currently holds appears
     // anywhere the adversary can copy it from -- either storage slot, or its
     // archive -- then the enclave is holding that same key.  `create_key` issues a
@@ -740,10 +738,16 @@ module integrity_proof {
           (cpu_1.tap_storage_produced[eid][t] &&
             cpu_1.tap_storage_produced_key[eid][t] == cpu_1.tap_kms_key[eid])
           ==> cpu_1.tap_enclave_metadata_key[eid] == cpu_1.tap_kms_key[eid]);
-    invariant enc_key_null_1:
+    // Before the enclave fetches from the KMS it holds neither key nor tag, in
+    // either trace: nothing it could load would be accepted, and no commit it
+    // attempted could match.  (Was enc_tag_null_1 + enc_key_null_1; they share
+    // an antecedent and describe the same pre-fetch state.)
+    invariant enc_key_and_tag_null:
       (verif && !key_fetched) ==>
         (!valid_key(cpu_1.tap_enclave_metadata_key[eid]) &&
-          !valid_key(cpu_2.tap_enclave_metadata_key[eid]));
+          !valid_key(cpu_2.tap_enclave_metadata_key[eid]) &&
+          !valid_tag(cpu_1.tap_enclave_metadata_tag[eid]) &&
+          !valid_tag(cpu_2.tap_enclave_metadata_tag[eid]));
 
     // If storage is tampered, the key or tag in storage is different from that in the enclave.
     // If the enclave is alive, the key in storage should be different from that in enclave.
@@ -776,8 +780,13 @@ module integrity_proof {
         (phase == ph_syncing &&
           !valid_key(cpu_1.tap_enclave_metadata_key[eid]) &&
           !valid_key(cpu_2.tap_enclave_metadata_key[eid]));
-    // Nothing is pending unless the enclave has actually written a ciphertext.
-    invariant pending_implies_stored:
+    // Reaching the window requires a storePS, which requires ph_active, which is
+    // reached only via getKeyTag or loadPS -- so the key has been fetched.
+    // (Renamed from `pending_implies_stored`: the name and comment both claimed
+    // "a ciphertext has been written", which is a stronger statement than the
+    // expression makes.  That stronger claim is `pending_produced_1`/`_2`, which
+    // state it about the replay history where it is actually needed.)
+    invariant pending_implies_key_fetched:
       (verif && phase == ph_pending) ==> key_fetched;
     // A bootstrapping enclave (nothing committed yet) is never in `ph_syncing`
     // once it has its key: there is nothing to load.

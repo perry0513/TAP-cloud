@@ -414,7 +414,66 @@ Not yet repaired.  The meaningful trace-1 form would be the analogue of
 `replay_storage` sets `tap_storage_tampered`, so replay falls under the same
 guard.  Whether it is provable is an open empirical question.
 
-### 12.6 What is complete
+### 12.6 Tautology census, and what `storage_tampered` is for
+
+Converting the hand-maintained ghost flags into macros over trace 1's state
+(§12.5) did not damage one invariant, it damaged seven.  All seven are trace-1
+statements; all seven are propositionally valid; all seven have sound trace-2
+twins, because those read `already_committed()` (trace 1) in the antecedent and
+a `cpu_2` fact in the consequent, which is a genuine cross-trace claim.
+
+With `A = valid_key/valid_tag(cpu_1.tap_kms_*[eid])` and
+`B = (cpu_1.tap_storage_* == cpu_1.tap_kms_*)`:
+
+| invariant | shape |
+|---|---|
+| `kms_tag_valid_1` | `A => A` |
+| `kms_tag_invalid_1` | `!A => !A` |
+| `kms_storage_same_key_1` | `(... and B) => B` |
+| `kms_storage_same_tag_1` | `(A and B) => (A => B)` -- **removed** |
+| `kms_storage_key_unsync` | `(!A or !B) => (!A or !B)` |
+| `kms_storage_tag_unsync` | `(!A or !B) => (!A or !B)` |
+| `possible_states` | `(A and B) => A` |
+
+`enc_storage_same_tag_1` inherited the same substitution but is **not** vacuous:
+its guard is on `kms_tag` and its conclusion on `enclave_metadata_tag`, so it
+still claims the third leg of the enclave/storage/KMS triangle.
+
+The direct consequence: **`storage_tampered` is read by zero invariants.** It
+survives only in its declaration, the two instance wirings, and the next-block
+plumbing.  `kms_tampered` survives in exactly one (`kms_key_valid_1`).  The
+original guards were `!kms_tampered && !storage_tampered && !storage_rolledback`,
+so replacing them with macros that assume their own conclusions dropped the
+flags out of the invariant set entirely.
+
+What was lost is a *shape*, not a theorem: the proof no longer states any
+trace-1 property conditional on the adversary not interfering.  Nothing unsound
+follows -- a tautology cannot make anything false -- but "if the adversary keeps
+its hands off, trace 1's storage agrees with its KMS" is no longer asserted
+anywhere.  The six remaining tautologies are left in place pending a decision
+between deleting them and restoring them in guarded form.
+
+### 12.7 A false invariant is not a vacuity probe for the induction step
+
+Adding `invariant false`, `verif ==> false`, and `(verif && !enclave_dead) ==>
+false` to the integrity proof gives, for all three:
+
+    induction base -> unknown        induction step -> unsat
+
+The `unsat` on the step is **not** evidence of a contradictory invariant set.
+k-induction assumes every invariant in the pre-state and proves each in the
+post-state; adding `false` to that set makes the hypothesis contradictory, so
+every step obligation -- the probe's own included -- becomes trivially provable.
+A false invariant poisons its own hypothesis.
+
+So a false invariant probes only the **base** case, where it behaves correctly
+here: `unknown`, never `unsat`, i.e. the init block cannot prove `false`.
+Step-level vacuity needs the probe *inside the transition* -- `assert(false)` in
+a `next` block or procedure body -- which is checked under the real invariant
+hypothesis without joining it.  That is why the `InitialHavoc` branch probes of
+§12.1 gave a usable signal and these do not.
+
+### 12.8 What is complete
 
 Checked mechanically, enum against dispatch table against Makefile:
 
