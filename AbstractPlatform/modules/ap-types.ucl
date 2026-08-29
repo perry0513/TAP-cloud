@@ -47,6 +47,7 @@ type mode_t = enum {
 //
 type tap_op_t = enum {
     Launch, Destroy, Enter, Exit, Resume, Pause, Snapshot, Clone, HavocMem, HavocPCRegs, HavocPT, Default,
+    Block, Release,
     StoreStorage, LoadStorage, TamperStorage, ReplayStorage, CreateKey, GetKeyAndTag, UpdateTag, DeleteKey, TransferKeyAndTag
 };
 

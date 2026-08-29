@@ -672,6 +672,7 @@ module tap {
     var op                : tap_op_t;
     var abort             : boolean;
     var r_replay_tag      : tag_t;
+    var r_bmap            : excl_map_t;
 
     call initialize_tap();
 
@@ -905,6 +906,25 @@ module tap {
           }
           (op == Destroy) : {
             call (status) = destroy(r_eid);
+          }
+          (op == Block) : {
+            havoc r_bmap;
+            // Restrict the havoc to bmaps that block_memory_region accepts.
+            // This loses no reachable state: for any other bmap the call
+            // returns enclave_op_invalid_arg and changes nothing, so the
+            // post-state equals the pre-state, which the loop already covers.
+            // It does keep the solver from having to derive the same fact by
+            // instantiating the procedure's success biconditional.
+            assume (forall (p : wap_addr_t) ::
+                      r_bmap[p] ==> (cpu_owner_map[p] == tap_null_enc_id));
+            call (status) = block_memory_region(r_bmap);
+          }
+          (op == Release) : {
+            havoc r_bmap;
+            // Same restriction, for release_blocked_memory's precondition.
+            assume (forall (p : wap_addr_t) ::
+                      r_bmap[p] ==> (cpu_owner_map[p] == tap_blocked_enc_id));
+            call (status) = release_blocked_memory(r_bmap);
           }
           // (op == Snapshot) : {
           //   call (status) = snapshot();
