@@ -556,9 +556,10 @@ module integrity_proof {
     //=============================================================================//
     invariant kms_key_valid_1: (verif && !kms_tampered_1) ==> valid_key(cpu_1.tap_kms_key[eid]);
     invariant kms_key_valid_2: verif ==> valid_key(cpu_2.tap_kms_key[eid]);
-    invariant kms_tag_valid_1: (verif && already_committed()) ==> valid_tag(cpu_1.tap_kms_tag[eid]);
+    // kms_tag_valid_1 / kms_tag_invalid_1 removed: `already_committed()` *is*
+    // `valid_tag(cpu_1.tap_kms_tag[eid])`, so they were `A => A` and `!A => !A`.
+    // The _2 twins below are genuine: trace-1 antecedent, trace-2 consequent.
     invariant kms_tag_valid_2: (verif && already_committed()) ==> valid_tag(cpu_2.tap_kms_tag[eid]);
-    invariant kms_tag_invalid_1: (verif && !already_committed()) ==> !valid_tag(cpu_1.tap_kms_tag[eid]);
     invariant kms_tag_invalid_2: (verif && !already_committed()) ==> !valid_tag(cpu_2.tap_kms_tag[eid]);
     // invariant storage_key_invalid_2: (verif && !already_committed()) ==> !valid_key(cpu_2.tap_storage_key[eid]);
 
@@ -579,9 +580,6 @@ module integrity_proof {
         cpu_1.tap_storage_tag[eid] == cpu_2.tap_storage_tag[eid]) ==>
           cpu_1.tap_storage_addr_valid[eid] == cpu_2.tap_storage_addr_valid[eid];
     // After first store, storage key shoud be equal to kms key
-    invariant kms_storage_same_key_1:
-      (verif && already_committed() && kms_storage_key_sync()) ==>
-        cpu_1.tap_storage_key[eid] == cpu_1.tap_kms_key[eid];
     invariant kms_storage_same_key_2:
       (verif && (already_committed() || phase == ph_pending)) ==>
           cpu_2.tap_storage_key[eid] == cpu_2.tap_kms_key[eid];
@@ -749,28 +747,15 @@ module integrity_proof {
           !valid_tag(cpu_1.tap_enclave_metadata_tag[eid]) &&
           !valid_tag(cpu_2.tap_enclave_metadata_tag[eid]));
 
-    // If storage is tampered, the key or tag in storage is different from that in the enclave.
-    // If the enclave is alive, the key in storage should be different from that in enclave.
-    invariant kms_storage_key_unsync:
-      (verif && !kms_storage_key_sync()) ==>
-        (valid_key(cpu_1.tap_kms_key[eid]) ==>
-          cpu_1.tap_storage_key[eid] != cpu_1.tap_kms_key[eid]);
-
-    invariant kms_storage_tag_unsync:
-      (verif && !kms_storage_tag_sync()) ==>
-        (valid_tag(cpu_1.tap_kms_tag[eid]) ==>
-          cpu_1.tap_storage_tag[eid] != cpu_1.tap_kms_tag[eid]);
+    // kms_storage_key_unsync / kms_storage_tag_unsync removed: both had become
+    // `(!A or !B) => (!A or !B)`.  See the census in
+    // docs/uclid-proof-rebuild.md section 12.6.
 
     //=============================================================================//
     // Flags for operation scheduling                                              //
     //=============================================================================//
-    // Limit possible (reachable) states
-    // Storage can only be in sync with a KMS tag that exists.  (The old form of
-    // this invariant also claimed that nothing is stored before the first commit,
-    // which the un-fused model makes false: `storePS` writes a ciphertext under
-    // the client key before any `updateTag` has ever succeeded.)
-    invariant possible_states:
-      verif ==> (kms_storage_tag_sync() ==> already_committed());
+    // possible_states removed: `kms_storage_tag_sync() ==> already_committed()`
+    // expands to `(A and B) => A`.
 
     // The phase automaton agrees with the platform state it is meant to track.
     invariant phase_dead_iff:

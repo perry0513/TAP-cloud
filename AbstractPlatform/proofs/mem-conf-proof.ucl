@@ -822,52 +822,35 @@ module mem_confidentiality_proof {
       assume (r_proof_op == tap_proof_op_create_key) ==>
               ((cpu_1').tap_kms_key[r_eid] == (cpu_2').tap_kms_key[r_eid]);
 
-      // If attacker tampered the storage, the storage must be tampered the same way
-      assume (r_proof_op == tap_proof_op_tamper_storage) ==>
-              ((cpu_1').tap_storage_mem[r_eid] ==
-               (cpu_2').tap_storage_mem[r_eid]);
-      assume (r_proof_op == tap_proof_op_tamper_storage) ==>
-              ((cpu_1').tap_storage_key[r_eid] ==
-               (cpu_2').tap_storage_key[r_eid]);
-      assume (r_proof_op == tap_proof_op_tamper_storage) ==>
-              ((cpu_1').tap_storage_tag[r_eid] ==
-               (cpu_2').tap_storage_tag[r_eid]);
-      assume (r_proof_op == tap_proof_op_tamper_storage) ==>
-              ((cpu_1').tap_storage_addr_valid[r_eid] ==
-               (cpu_2').tap_storage_addr_valid[r_eid]);
+      // Both adversary writes to persistent storage -- tampering with it, and
+      // replaying a previously produced ciphertext into it -- are resolved the
+      // same way in the two traces.  Persistent storage is adversary-controlled,
+      // so what it writes there is an adversary *choice*, not a function of the
+      // secret; the two traces must be held to the same choice or they would
+      // differ for a reason that has nothing to do with the secret.
+      //
+      // For replayPS, agreeing on the replayed *tag* alone is not enough: the two
+      // traces choose independently, so one replay can fail while the other
+      // succeeds, and this proof carries no content-binding invariant to relate
+      // the untouched storage of the failing trace to the tag of the succeeding
+      // one.  Hence the whole written ciphertext is constrained, exactly as for
+      // tamperPS.
+      assume (r_proof_op == tap_proof_op_tamper_storage ||
+              r_proof_op == tap_proof_op_replay_storage) ==>
+              ((cpu_1').tap_storage_mem[r_eid]        == (cpu_2').tap_storage_mem[r_eid]        &&
+               (cpu_1').tap_storage_key[r_eid]        == (cpu_2').tap_storage_key[r_eid]        &&
+               (cpu_1').tap_storage_tag[r_eid]        == (cpu_2').tap_storage_tag[r_eid]        &&
+               (cpu_1').tap_storage_addr_valid[r_eid] == (cpu_2').tap_storage_addr_valid[r_eid]);
 
-      // The adversary replays the same previously produced ciphertext in both
-      // traces, exactly as it tampers identically in both.  Agreeing on the tag
-      // alone is not enough here: the two traces choose their replay tag
-      // independently, so one replay can fail while the other succeeds, and this
-      // proof carries no content-binding invariant to relate the untouched
-      // storage of the failing trace to the tag of the succeeding one.
-      assume (r_proof_op == tap_proof_op_replay_storage) ==>
-              ((cpu_1').tap_storage_mem[r_eid] ==
-               (cpu_2').tap_storage_mem[r_eid]);
-      assume (r_proof_op == tap_proof_op_replay_storage) ==>
-              ((cpu_1').tap_storage_addr_valid[r_eid] ==
-               (cpu_2').tap_storage_addr_valid[r_eid]);
-      assume (r_proof_op == tap_proof_op_replay_storage) ==>
-              ((cpu_1').tap_storage_key[r_eid] ==
-               (cpu_2').tap_storage_key[r_eid]);
-      assume (r_proof_op == tap_proof_op_replay_storage) ==>
-              ((cpu_1').tap_storage_tag[r_eid] ==
-               (cpu_2').tap_storage_tag[r_eid]);
-
-      // If the client enclave stores to storage, the storage must be stored the same way
+      // If the client enclave stores to storage, the storage must be stored the
+      // same way.  (This is the enclave-under-test's own store.  A store by an
+      // *adversary-owned* enclave needs no assumption: its plaintext comes from
+      // adversary-visible memory, so equality there is derived, not assumed.)
       assume (e_proof_op == tap_proof_op_store_storage) ==>
-              ((cpu_1').tap_storage_mem[cpu_1.cpu_enclave_id] ==
-               (cpu_2').tap_storage_mem[cpu_2.cpu_enclave_id]);
-      assume (e_proof_op == tap_proof_op_store_storage) ==>
-              ((cpu_1').tap_storage_key[cpu_1.cpu_enclave_id] ==
-               (cpu_2').tap_storage_key[cpu_2.cpu_enclave_id]);
-      assume (e_proof_op == tap_proof_op_store_storage) ==>
-              ((cpu_1').tap_storage_tag[cpu_1.cpu_enclave_id] ==
-               (cpu_2').tap_storage_tag[cpu_2.cpu_enclave_id]);
-      assume (e_proof_op == tap_proof_op_store_storage) ==>
-              ((cpu_1').tap_storage_addr_valid[cpu_1.cpu_enclave_id] ==
-               (cpu_2').tap_storage_addr_valid[cpu_2.cpu_enclave_id]);
+              ((cpu_1').tap_storage_mem[cpu_1.cpu_enclave_id]        == (cpu_2').tap_storage_mem[cpu_2.cpu_enclave_id]        &&
+               (cpu_1').tap_storage_key[cpu_1.cpu_enclave_id]        == (cpu_2').tap_storage_key[cpu_2.cpu_enclave_id]        &&
+               (cpu_1').tap_storage_tag[cpu_1.cpu_enclave_id]        == (cpu_2').tap_storage_tag[cpu_2.cpu_enclave_id]        &&
+               (cpu_1').tap_storage_addr_valid[cpu_1.cpu_enclave_id] == (cpu_2').tap_storage_addr_valid[cpu_2.cpu_enclave_id]);
 
       // assert (current_mode_1' == current_mode_2');
 

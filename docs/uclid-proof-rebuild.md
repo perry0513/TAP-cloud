@@ -453,6 +453,37 @@ its hands off, trace 1's storage agrees with its KMS" is no longer asserted
 anywhere.  The six remaining tautologies are left in place pending a decision
 between deleting them and restoring them in guarded form.
 
+### 12.7a The six tautologies removed; what `storage_tampered` was for
+
+All seven identified in §12.6 are now gone.  Integrity drops from 5944 to 5656
+unsat over the same 24 splits -- exactly -12 per target, two obligations (base
+and step) for each of the six invariants, and nothing else.
+
+Why the proof never needed them, and why `storage_tampered` is not missed: the
+two proofs have different shapes.  The old one said *if the adversary has not
+tampered or rolled back, the traces agree* -- the flags were hypotheses that
+excluded the attack.  The new one does not exclude tampering, it tolerates it,
+and the conclusion is unconditional.  Four mechanisms carry that:
+
+1. `tamperPS` cannot forge a believable tag: its contract excludes the written
+   tag from equalling `Mtag`, `KMStag`, or an immediate predecessor of either.
+2. `replayPS` can only reinstate a member of `produced`, and `chain` has left
+   inverses, so a tag *determines* its ciphertext.  Replaying the committed tag
+   reinstates exactly the committed ciphertext -- a no-op, not an attack.
+3. `updateTag` is a conditional append, aborting unless the enclave's tag
+   extends the committed one by one link under a matching key.
+4. `loadPS` accepts only a tag the enclave expects.
+
+Every adversary write therefore lands in one of two buckets: the enclave rejects
+it, or it *is* the committed state.  Neither diverges the traces.
+
+Two caveats.  This explains why the flags became unnecessary; it does not excuse
+how they left -- by accidental macro substitution, not by decision.  And
+something real was lost: no invariant now states *"under no interference, trace
+1's storage agrees with its KMS"*.  The main theorem does not need it, but a
+reader would reasonably expect it stated.  `storage_tampered` is still set by
+`full-adv-step` and plumbed through the proof while being read by nothing.
+
 ### 12.7 A false invariant is not a vacuity probe for the induction step
 
 Adding `invariant false`, `verif ==> false`, and `(verif && !enclave_dead) ==>
@@ -472,6 +503,18 @@ Step-level vacuity needs the probe *inside the transition* -- `assert(false)` in
 a `next` block or procedure body -- which is checked under the real invariant
 hypothesis without joining it.  That is why the `InitialHavoc` branch probes of
 §12.1 gave a usable signal and these do not.
+
+Confirmed directly.  `assert(false)` placed at the end of the integrity proof's
+`init` block and at the end of its `next` block yields:
+
+| probe | obligation | result |
+|---|---|---|
+| `assert(false)` in `init` | induction base | `unknown` |
+| `assert(false)` in `next` | induction step | `unknown` |
+
+Neither is `unsat`, so neither block is contradictory -- and the `next` probe
+gives a meaningful *step* signal precisely because it does not join the
+invariant set.
 
 ### 12.8 What is complete
 
