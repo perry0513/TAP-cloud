@@ -1,3 +1,6 @@
+// The adversary committing its own enclave's tag to the KMS.  Granular, so
+// the window between writing a ciphertext and committing its tag is reachable
+// for adversary-owned enclaves exactly as it is for the enclave under test.
 module tap {
   procedure [inline] IntegrityAdversarialStep(
       /* mode       */ mode       : mode_t,
@@ -9,14 +12,7 @@ module tap {
       /* dead       */ dead       : boolean
   )
     returns (next_mode : mode_t, enclave_dead : boolean, status : enclave_op_result_t)
-    modifies cpu_mem;
-    modifies cpu_regs;
-    modifies cpu_pc;
-    modifies cpu_addr_valid;
-    modifies cache_valid_map, cache_tag_map;
-    modifies tap_enclave_metadata_addr_valid;
-    modifies tap_enclave_metadata_key;
-    modifies tap_enclave_metadata_tag;
+    modifies tap_kms_tag;
   {
     var abort : boolean;
 
@@ -25,9 +21,9 @@ module tap {
     // the "default" value which may be overwritten by destroy.
     enclave_dead = dead;
 
-    assume (op == tap_proof_op_load_storage);
+    assume (op == tap_proof_op_update_tag);
 
-    call (status, abort) = load_storage_only();
+    call (status, abort) = update_tag();
     next_mode = mode_untrusted;
   }
 

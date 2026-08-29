@@ -51,6 +51,8 @@ INTEGRITY_PROOF_adv_delete_key=./../modules/tap-mod-integrity/adv-delete-key.ucl
 INTEGRITY_PROOF_adv_store_storage=./../modules/tap-mod-integrity/adv-store-storage.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
 INTEGRITY_PROOF_adv_load_storage=./../modules/tap-mod-integrity/adv-load-storage.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
 INTEGRITY_PROOF_adv_replay_storage=./../modules/tap-mod-integrity/adv-replay-storage.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
+INTEGRITY_PROOF_adv_get_key_and_tag=./../modules/tap-mod-integrity/adv-get-key-and-tag.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
+INTEGRITY_PROOF_adv_update_tag=./../modules/tap-mod-integrity/adv-update-tag.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
 
 # Memory confidentiality proofs
 MEM_CONF_PROOF_next=./../modules/tap-mod-conf.ucl ./mem-conf-proof.ucl ./mem-conf-proof-init-stub.ucl
@@ -81,6 +83,8 @@ MEM_CONF_PROOF_obs_tamper_storage=./../modules/tap-mod-conf/obs-tamper-storage.u
 MEM_CONF_PROOF_obs_store_storage=./../modules/tap-mod-conf/obs-store-storage.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
 MEM_CONF_PROOF_obs_load_storage=./../modules/tap-mod-conf/obs-load-storage.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
 MEM_CONF_PROOF_obs_replay_storage=./../modules/tap-mod-conf/obs-replay-storage.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
+MEM_CONF_PROOF_obs_get_key_and_tag=./../modules/tap-mod-conf/obs-get-key-and-tag.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
+MEM_CONF_PROOF_obs_update_tag=./../modules/tap-mod-conf/obs-update-tag.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
 
 # PT confidentiality proofs
 # (Enclave operations)
@@ -296,6 +300,18 @@ integrity-case-split-new:
 	time uclid -g integrity-adv-load-storage/load-storage --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_load_storage)
 	./run_all_smt.sh integrity-adv-load-storage 10
 
+	# Adversary get key and tag operation
+	rm -rf integrity-adv-get-key-and-tag/
+	mkdir -p integrity-adv-get-key-and-tag/
+	time uclid -g integrity-adv-get-key-and-tag/get-key-and-tag --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_get_key_and_tag)
+	./run_all_smt.sh integrity-adv-get-key-and-tag 10
+
+	# Adversary update tag operation
+	rm -rf integrity-adv-update-tag/
+	mkdir -p integrity-adv-update-tag/
+	time uclid -g integrity-adv-update-tag/update-tag --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_update_tag)
+	./run_all_smt.sh integrity-adv-update-tag 10
+
 
 # Stale
 mem-conf-proof:
@@ -430,6 +446,18 @@ mem-conf-case-split-new:
 	mkdir -p mem-conf-obs-replay-storage
 	time uclid -g mem-conf-obs-replay-storage/replay-storage --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_replay_storage)
 	./run_all_smt.sh mem-conf-obs-replay-storage 10
+
+	# Observer get key and tag operation
+	rm -rf mem-conf-obs-get-key-and-tag
+	mkdir -p mem-conf-obs-get-key-and-tag
+	time uclid -g mem-conf-obs-get-key-and-tag/get-key-and-tag --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_get_key_and_tag)
+	./run_all_smt.sh mem-conf-obs-get-key-and-tag 10
+
+	# Observer update tag operation
+	rm -rf mem-conf-obs-update-tag
+	mkdir -p mem-conf-obs-update-tag
+	time uclid -g mem-conf-obs-update-tag/update-tag --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_update_tag)
+	./run_all_smt.sh mem-conf-obs-update-tag 10
 
 	# Enclave get key and tag operation
 	rm -rf mem-conf-e-get-key-and-tag

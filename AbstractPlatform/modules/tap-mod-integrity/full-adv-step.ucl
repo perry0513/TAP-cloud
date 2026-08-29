@@ -163,10 +163,10 @@ module tap {
       }
     }
     (op == tap_proof_op_load_storage) : {
-      call (status, abort) = load_storage();
+      call (status, abort) = load_storage_only();
     }
     (op == tap_proof_op_store_storage) : {
-      call (status, abort) = store_storage();
+      call (status, abort) = store_storage_only();
     }
     (op == tap_proof_op_get_key_and_tag) : {
       call (status, abort) = get_key_and_tag();
