@@ -1,587 +1,227 @@
-COMMON_SOURCE=../../Common/common-types.ucl
-AP_SOURCE=./../modules/ap-types.ucl
-CACHE_SOURCE=./../modules/tap-mod-cache.ucl
-CPU_SOURCES=$(COMMON_SOURCE) $(AP_SOURCE) $(CACHE_SOURCE) ./../modules/tap-mod-cpu.ucl
-TAP_OP_SOURCE=./../modules/tap-mod-destroy.ucl ./../modules/tap-mod-enter.ucl ./../modules/tap-mod-exit.ucl ./../modules/tap-mod-launch.ucl ./../modules/tap-mod-pause.ucl ./../modules/tap-mod-resume.ucl ./../modules/tap-mod-block-memory-region.ucl ./../modules/tap-mod-release-memory-region.ucl
-# TAP_OP_SOURCE+=./../modules/tap-mod-clone.ucl ./../modules/tap-mod-snapshot.ucl // Cerberus
-TAP_OP_SOURCE+=./../modules/tap-mod-load-storage.ucl ./../modules/tap-mod-store-storage.ucl ./../modules/tap-mod-kms.ucl ./../modules/tap-mod-tamper-storage.ucl ./../modules/tap-mod-replay-storage.ucl
-TAP_SOURCES=$(CPU_SOURCES) $(TAP_OP_SOURCE) ./../modules/tap-mod.ucl
-PROOF_SOURCES=$(TAP_SOURCES) ./proof-common.ucl
+# ---------------------------------------------------------------------------
+# TAP-cloud proof build.
+#
+#   make integrity-base    integrity-cloud    integrity-all
+#   make conf-base         conf-cloud         conf-all
+#   make measurement
+#   make check-all                 measurement + integrity-all + conf-all
+#
+#   base   operations inherited from the original TAP
+#   cloud  operations TAP-cloud adds (persistent storage and the KMS)
+#   all    both
+#
+# Every target regenerates its case splits with uclid and discharges all of a
+# split's obligations in parallel via run_all_smt.sh.  A target reports loudly
+# and make exits non-zero if generation fails or any obligation comes back
+# other than `unsat`.
+#
+# Obligations within a split already run in parallel; splits are independent,
+# so `make -j` parallelises across them too:
+#     make -j4 check-all
+#
+# Generated artifacts live in gen-chk/<proof>-<split>/ and are removed by
+# `make clean`.  Each holds the emitted SMT files and a gen.log.
+#
+#   TIMEOUT   per-solver budget, seconds   (default 60)
+#   JOBS      solver processes per split    (default 8)
+#
+# Both are passed straight through to run_all_smt.sh.  A run uses about
+# (make -j) x JOBS cores, so on a 20-core box either of these fits:
+#     make JOBS=20 check-all          # one split at a time, 20 solvers
+#     make -j4 JOBS=5 check-all       # four splits at once, 5 solvers each
+# ---------------------------------------------------------------------------
 
-MEASURE=./../modules/measure.ucl
-MEASUREMENT_PROOF=./measurement-proof.ucl
-
-INTEGRITY_PROOF=./integrity-proof.ucl ./integrity-proof-init.ucl ./integrity-proof-next.ucl ./../modules/tap-mod-integrity.ucl
-
-MEM_CONF_PROOF=./../modules/tap-mod-conf.ucl ./mem-conf-proof.ucl ./mem-conf-proof-init.ucl
-PT_CONF_PROOF=./../modules/tap-mod-conf.ucl ./pt-confidentiality-proof.ucl
-CACHE_CONF_PROOF=./../modules/tap-mod-conf.ucl ./cache-confidentiality-proof.ucl
-
-INTEGRITY_PROOF_complete=./../modules/tap-mod-integrity/full-enc-step.ucl ./../modules/tap-mod-integrity/full-adv-step.ucl ./../modules/tap-mod-integrity/complete-transition-relation.ucl $(INTEGRITY_PROOF)
-MEM_CONF_PROOF_complete=./../modules/tap-mod-conf/full-enc-step.ucl ./../modules/tap-mod-conf/full-obs-step.ucl ./../modules/tap-mod-conf/complete-transition-relation.ucl $(MEM_CONF_PROOF)
-PT_CONF_PROOF_complete=./../modules/tap-mod-conf/full-enc-step.ucl ./../modules/tap-mod-conf/full-obs-step.ucl ./../modules/tap-mod-conf/complete-transition-relation.ucl $(PT_CONF_PROOF)
-CACHE_CONF_PROOF_complete=./../modules/tap-mod-conf/full-enc-step.ucl ./../modules/tap-mod-conf/full-obs-step.ucl ./../modules/tap-mod-conf/complete-transition-relation.ucl $(CACHE_CONF_PROOF)
-
-# Integrity proofs
-INTEGRITY_PROOF_next=./integrity-proof.ucl ./integrity-proof-init-stub.ucl ./integrity-proof-next.ucl ./../modules/tap-mod-integrity.ucl
-# (Enclave operations)
-INTEGRITY_PROOF_e_compute_next=./../modules/tap-mod-integrity/e-compute.ucl ./../modules/tap-mod-integrity/full-adv-step.ucl $(INTEGRITY_PROOF_next)
-INTEGRITY_PROOF_e_exit_next=./../modules/tap-mod-integrity/e-exit.ucl ./../modules/tap-mod-integrity/full-adv-step.ucl $(INTEGRITY_PROOF_next)
-INTEGRITY_PROOF_e_pause_next=./../modules/tap-mod-integrity/e-pause.ucl ./../modules/tap-mod-integrity/full-adv-step.ucl $(INTEGRITY_PROOF_next)
-INTEGRITY_PROOF_e_snapshot_next=./../modules/tap-mod-integrity/e-snapshot.ucl ./../modules/tap-mod-integrity/full-adv-step.ucl $(INTEGRITY_PROOF_next)
-INTEGRITY_PROOF_e_store_storage_next=./../modules/tap-mod-integrity/e-store-storage.ucl ./../modules/tap-mod-integrity/full-adv-step.ucl $(INTEGRITY_PROOF_next)
-INTEGRITY_PROOF_e_load_storage_next=./../modules/tap-mod-integrity/e-load-storage.ucl ./../modules/tap-mod-integrity/full-adv-step.ucl $(INTEGRITY_PROOF_next)
-INTEGRITY_PROOF_e_get_key_and_tag=./../modules/tap-mod-integrity/e-get-key-and-tag.ucl ./../modules/tap-mod-integrity/full-adv-step.ucl $(INTEGRITY_PROOF_next)
-INTEGRITY_PROOF_e_update_tag=./../modules/tap-mod-integrity/e-update-tag.ucl ./../modules/tap-mod-integrity/full-adv-step.ucl $(INTEGRITY_PROOF_next)
-# (Observer operations)
-INTEGRITY_PROOF_adv_block=./../modules/tap-mod-integrity/adv-block.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
-INTEGRITY_PROOF_adv_compute=./../modules/tap-mod-integrity/adv-compute.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
-INTEGRITY_PROOF_adv_clone=./../modules/tap-mod-integrity/adv-clone.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
-INTEGRITY_PROOF_adv_destroy=./../modules/tap-mod-integrity/adv-destroy.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
-INTEGRITY_PROOF_adv_enter=./../modules/tap-mod-integrity/adv-enter.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
-INTEGRITY_PROOF_adv_exit=./../modules/tap-mod-integrity/adv-exit.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
-INTEGRITY_PROOF_adv_snapshot=./../modules/tap-mod-integrity/adv-snapshot.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
-INTEGRITY_PROOF_adv_launch=./../modules/tap-mod-integrity/adv-launch.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
-INTEGRITY_PROOF_adv_pause=./../modules/tap-mod-integrity/adv-pause.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
-INTEGRITY_PROOF_adv_release=./../modules/tap-mod-integrity/adv-release.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
-INTEGRITY_PROOF_adv_resume=./../modules/tap-mod-integrity/adv-resume.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
-INTEGRITY_PROOF_adv_tamper_storage=./../modules/tap-mod-integrity/adv-tamper-storage.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
-INTEGRITY_PROOF_adv_create_key=./../modules/tap-mod-integrity/adv-create-key.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
-INTEGRITY_PROOF_adv_delete_key=./../modules/tap-mod-integrity/adv-delete-key.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
-INTEGRITY_PROOF_adv_store_storage=./../modules/tap-mod-integrity/adv-store-storage.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
-INTEGRITY_PROOF_adv_load_storage=./../modules/tap-mod-integrity/adv-load-storage.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
-INTEGRITY_PROOF_adv_replay_storage=./../modules/tap-mod-integrity/adv-replay-storage.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
-INTEGRITY_PROOF_adv_get_key_and_tag=./../modules/tap-mod-integrity/adv-get-key-and-tag.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
-INTEGRITY_PROOF_adv_update_tag=./../modules/tap-mod-integrity/adv-update-tag.ucl ./../modules/tap-mod-integrity/full-enc-step.ucl $(INTEGRITY_PROOF)
-
-# Memory confidentiality proofs
-MEM_CONF_PROOF_next=./../modules/tap-mod-conf.ucl ./mem-conf-proof.ucl ./mem-conf-proof-init-stub.ucl
-# (Enclave operations)
-MEM_CONF_PROOF_e_compute_next=./../modules/tap-mod-conf/e-compute.ucl ./../modules/tap-mod-conf/full-obs-step.ucl $(MEM_CONF_PROOF_next)
-MEM_CONF_PROOF_e_exit_next=./../modules/tap-mod-conf/e-exit.ucl ./../modules/tap-mod-conf/full-obs-step.ucl $(MEM_CONF_PROOF_next)
-MEM_CONF_PROOF_e_pause_next=./../modules/tap-mod-conf/e-pause.ucl ./../modules/tap-mod-conf/full-obs-step.ucl $(MEM_CONF_PROOF_next)
-MEM_CONF_PROOF_e_snapshot_next=./../modules/tap-mod-conf/e-snapshot.ucl ./../modules/tap-mod-conf/full-obs-step.ucl $(MEM_CONF_PROOF_next)
-MEM_CONF_PROOF_e_store_storage_next=./../modules/tap-mod-conf/e-store-storage.ucl ./../modules/tap-mod-conf/full-obs-step.ucl $(MEM_CONF_PROOF_next)
-MEM_CONF_PROOF_e_load_storage_next=./../modules/tap-mod-conf/e-load-storage.ucl ./../modules/tap-mod-conf/full-obs-step.ucl $(MEM_CONF_PROOF_next)
-MEM_CONF_PROOF_e_get_key_and_tag_next=./../modules/tap-mod-conf/e-get-key-and-tag.ucl ./../modules/tap-mod-conf/full-obs-step.ucl $(MEM_CONF_PROOF_next)
-MEM_CONF_PROOF_e_update_tag_next=./../modules/tap-mod-conf/e-update-tag.ucl ./../modules/tap-mod-conf/full-obs-step.ucl $(MEM_CONF_PROOF_next)
-# (Observer operations)
-MEM_CONF_PROOF_obs_block=./../modules/tap-mod-conf/obs-block.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
-MEM_CONF_PROOF_obs_compute=./../modules/tap-mod-conf/obs-compute.ucl  ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
-MEM_CONF_PROOF_obs_clone=./../modules/tap-mod-conf/obs-clone.ucl  ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
-MEM_CONF_PROOF_obs_destroy=./../modules/tap-mod-conf/obs-destroy.ucl  ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
-MEM_CONF_PROOF_obs_enter=./../modules/tap-mod-conf/obs-enter.ucl  ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
-MEM_CONF_PROOF_obs_exit=./../modules/tap-mod-conf/obs-exit.ucl  ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
-MEM_CONF_PROOF_obs_snapshot=./../modules/tap-mod-conf/obs-snapshot.ucl  ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
-MEM_CONF_PROOF_obs_launch=./../modules/tap-mod-conf/obs-launch.ucl  ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
-MEM_CONF_PROOF_obs_pause=./../modules/tap-mod-conf/obs-pause.ucl  ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
-MEM_CONF_PROOF_obs_release=./../modules/tap-mod-conf/obs-release.ucl  ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
-MEM_CONF_PROOF_obs_resume=./../modules/tap-mod-conf/obs-resume.ucl  ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
-MEM_CONF_PROOF_obs_create_key=./../modules/tap-mod-conf/obs-create-key.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
-MEM_CONF_PROOF_obs_delete_key=./../modules/tap-mod-conf/obs-delete-key.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
-MEM_CONF_PROOF_obs_tamper_storage=./../modules/tap-mod-conf/obs-tamper-storage.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
-MEM_CONF_PROOF_obs_store_storage=./../modules/tap-mod-conf/obs-store-storage.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
-MEM_CONF_PROOF_obs_load_storage=./../modules/tap-mod-conf/obs-load-storage.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
-MEM_CONF_PROOF_obs_replay_storage=./../modules/tap-mod-conf/obs-replay-storage.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
-MEM_CONF_PROOF_obs_get_key_and_tag=./../modules/tap-mod-conf/obs-get-key-and-tag.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
-MEM_CONF_PROOF_obs_update_tag=./../modules/tap-mod-conf/obs-update-tag.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(MEM_CONF_PROOF)
-
-# PT confidentiality proofs
-# (Enclave operations)
-PT_CONF_PROOF_e_compute=./../modules/tap-mod-conf/e-compute.ucl ./../modules/tap-mod-conf/full-obs-step.ucl $(PT_CONF_PROOF)
-PT_CONF_PROOF_e_exit=./../modules/tap-mod-conf/e-exit.ucl ./../modules/tap-mod-conf/full-obs-step.ucl $(PT_CONF_PROOF)
-PT_CONF_PROOF_e_pause=./../modules/tap-mod-conf/e-pause.ucl ./../modules/tap-mod-conf/full-obs-step.ucl $(PT_CONF_PROOF)
-# (Observer operations)
-PT_CONF_PROOF_obs_block=./../modules/tap-mod-conf/obs-block.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(PT_CONF_PROOF)
-PT_CONF_PROOF_obs_compute=./../modules/tap-mod-conf/obs-compute.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(PT_CONF_PROOF)
-PT_CONF_PROOF_obs_destroy=./../modules/tap-mod-conf/obs-destroy.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(PT_CONF_PROOF)
-PT_CONF_PROOF_obs_enter=./../modules/tap-mod-conf/obs-enter.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(PT_CONF_PROOF)
-PT_CONF_PROOF_obs_exit=./../modules/tap-mod-conf/obs-exit.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(PT_CONF_PROOF)
-PT_CONF_PROOF_obs_launch=./../modules/tap-mod-conf/obs-launch.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(PT_CONF_PROOF)
-PT_CONF_PROOF_obs_pause=./../modules/tap-mod-conf/obs-pause.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(PT_CONF_PROOF)
-PT_CONF_PROOF_obs_release=./../modules/tap-mod-conf/obs-release.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(PT_CONF_PROOF)
-PT_CONF_PROOF_obs_resume=./../modules/tap-mod-conf/obs-resume.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(PT_CONF_PROOF)
-
-# Cache confidentiality proofs
-# (Enclave operations)
-CACHE_CONF_PROOF_e_compute=./../modules/tap-mod-conf/e-compute.ucl ./../modules/tap-mod-conf/full-obs-step.ucl $(CACHE_CONF_PROOF)
-CACHE_CONF_PROOF_e_exit=./../modules/tap-mod-conf/e-exit.ucl ./../modules/tap-mod-conf/full-obs-step.ucl $(CACHE_CONF_PROOF)
-CACHE_CONF_PROOF_e_pause=./../modules/tap-mod-conf/e-pause.ucl ./../modules/tap-mod-conf/full-obs-step.ucl $(CACHE_CONF_PROOF)
-# (Observer operations)
-CACHE_CONF_PROOF_obs_block=./../modules/tap-mod-conf/obs-block.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(CACHE_CONF_PROOF)
-CACHE_CONF_PROOF_obs_compute=./../modules/tap-mod-conf/obs-compute.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(CACHE_CONF_PROOF)
-CACHE_CONF_PROOF_obs_destroy=./../modules/tap-mod-conf/obs-destroy.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(CACHE_CONF_PROOF)
-CACHE_CONF_PROOF_obs_enter=./../modules/tap-mod-conf/obs-enter.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(CACHE_CONF_PROOF)
-CACHE_CONF_PROOF_obs_exit=./../modules/tap-mod-conf/obs-exit.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(CACHE_CONF_PROOF)
-CACHE_CONF_PROOF_obs_launch=./../modules/tap-mod-conf/obs-launch.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(CACHE_CONF_PROOF)
-CACHE_CONF_PROOF_obs_pause=./../modules/tap-mod-conf/obs-pause.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(CACHE_CONF_PROOF)
-CACHE_CONF_PROOF_obs_release=./../modules/tap-mod-conf/obs-release.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(CACHE_CONF_PROOF)
-CACHE_CONF_PROOF_obs_resume=./../modules/tap-mod-conf/obs-resume.ucl ./../modules/tap-mod-conf/full-enc-step.ucl $(CACHE_CONF_PROOF)
-
+SHELL := /bin/bash
 .ONESHELL:
 
-# Measurement proof
-measurement-proof-printed:
-	rm -rf verify_log
-	mkdir -p measurement
-	rm -rf measurement-old
-	mv measurement measurement-old
-	mkdir measurement
-	time uclid -g measurement/measure --main measurement_proof $(PROOF_SOURCES) $(MEASURE) $(MEASUREMENT_PROOF)
-	./run_all_smt.sh measurement 60
-
-# Stale
-integrity-proof:
-	uclid --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_complete)
-
-# Stale
-integrity-printed:
-	mkdir -p integrity
-	rm -rf integrity-old
-	mv integrity integrity-old
-	mkdir integrity
-	uclid -g integrity/smt --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_complete)
-
-# Verified
-integrity-case-split:
-	rm -rf verify_log
-
-	# Launch operation
-	rm -rf integrity-adv-launch/
-	mkdir -p integrity-adv-launch/
-	time uclid -g integrity-adv-launch/launch --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_launch)
-	./run_all_smt.sh integrity-adv-launch
-
-	# Enclave Compute operation
-	rm -rf integrity-enc-compute
-	mkdir -p integrity-enc-compute
-	time uclid -g integrity-enc-compute/compute-next --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_e_compute_next)
-	./run_all_smt.sh integrity-enc-compute
-
-	# Enclave Exit operation
-	rm -rf integrity-enc-exit
-	mkdir -p integrity-enc-exit
-	time uclid -g integrity-enc-exit/exit-next --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_e_exit_next)
-	./run_all_smt.sh integrity-enc-exit
-
-	# Enclave Pause operation
-	rm -rf integrity-enc-pause
-	mkdir -p integrity-enc-pause
-	time uclid -g integrity-enc-pause/pause-next --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_e_pause_next)
-	./run_all_smt.sh integrity-enc-pause
-
-	# Enclave Snapshot operation
-	# rm -rf integrity-enc-snapshot/
-	# mkdir -p integrity-enc-snapshot/
-	# time uclid -g integrity-enc-snapshot/snapshot --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_e_snapshot_next)
-	# ./run_all_smt.sh integrity-enc-snapshot
-
-	# Block operation
-	rm -rf integrity-adv-block
-	mkdir -p integrity-adv-block
-	time uclid -g integrity-adv-block/block --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_block)
-	./run_all_smt.sh integrity-adv-block
-
-	# Compute operation
-	rm -rf integrity-adv-compute/
-	mkdir -p integrity-adv-compute/
-	time uclid -g integrity-adv-compute/compute --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_compute)
-	./run_all_smt.sh integrity-adv-compute
-
-	# Clone operation
-	# rm -rf integrity-adv-clone/
-	# mkdir -p integrity-adv-clone/
-	# time uclid -g integrity-adv-clone/clone --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_clone)
-	# ./run_all_smt.sh integrity-adv-clone
-
-	# Destroy operation
-	rm -rf integrity-adv-destroy/
-	mkdir -p integrity-adv-destroy/
-	time uclid -g integrity-adv-destroy/destroy --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_destroy)
-	./run_all_smt.sh integrity-adv-destroy
-
-	# Enter operation
-	rm -rf integrity-adv-enter/
-	mkdir -p integrity-adv-enter/
-	time uclid -g integrity-adv-enter/enter --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_enter)
-	./run_all_smt.sh integrity-adv-enter
-
-	# Exit operation
-	rm -rf integrity-adv-exit/
-	mkdir -p integrity-adv-exit/
-	time uclid -g integrity-adv-exit/exit --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_exit)
-	./run_all_smt.sh integrity-adv-exit
-
-	# # Snapshot operation
-	# rm -rf integrity-adv-snapshot/
-	# mkdir -p integrity-adv-snapshot/
-	# time uclid -g integrity-adv-snapshot/snapshot --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_snapshot)
-	# ./run_all_smt.sh integrity-adv-snapshot
-
-	# Pause operation
-	rm -rf integrity-adv-pause/
-	mkdir -p integrity-adv-pause/
-	time uclid -g integrity-adv-pause/pause --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_pause)
-	./run_all_smt.sh integrity-adv-pause
-
-	# Release operation
-	rm -rf integrity-adv-release/
-	mkdir -p integrity-adv-release/
-	time uclid -g integrity-adv-release/release --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_release)
-	./run_all_smt.sh integrity-adv-release
-
-	# Resume operation
-	rm -rf integrity-adv-resume/
-	mkdir -p integrity-adv-resume/
-	time uclid -g integrity-adv-resume/resume --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_resume)
-	./run_all_smt.sh integrity-adv-resume
-
-# Remove this when ready
-integrity-case-split-new:
-	rm -rf verify_log_new
-
-	# Create key operation
-	rm -rf integrity-adv-create-key/
-	mkdir -p integrity-adv-create-key/
-	time uclid -g integrity-adv-create-key/create-key --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_create_key)
-	./run_all_smt.sh integrity-adv-create-key 10
-
-	# Delete key operation
-	rm -rf integrity-adv-delete-key/
-	mkdir -p integrity-adv-delete-key/
-	time uclid -g integrity-adv-delete-key/delete-key --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_delete_key)
-	./run_all_smt.sh integrity-adv-delete-key 10
-
-	# Tamper storage operation
-	rm -rf integrity-adv-tamper-storage/
-	mkdir -p integrity-adv-tamper-storage/
-	time uclid -g integrity-adv-tamper-storage/tamper-storage --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_tamper_storage)
-	./run_all_smt.sh integrity-adv-tamper-storage 10
-
-	# Get key and tag operation
-	rm -rf integrity-enc-get-key-and-tag/
-	mkdir -p integrity-enc-get-key-and-tag/
-	time uclid -g integrity-enc-get-key-and-tag/get-key-and-tag --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_e_get_key_and_tag)
-	./run_all_smt.sh integrity-enc-get-key-and-tag 10
-
-	# Update tag operation
-	rm -rf integrity-enc-update-tag/
-	mkdir -p integrity-enc-update-tag/
-	time uclid -g integrity-enc-update-tag/update-tag --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_e_update_tag)
-	./run_all_smt.sh integrity-enc-update-tag 10
-
-	# Replay storage operation
-	rm -rf integrity-adv-replay-storage/
-	mkdir -p integrity-adv-replay-storage/
-	time uclid -g integrity-adv-replay-storage/replay-storage --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_replay_storage)
-	./run_all_smt.sh integrity-adv-replay-storage 10
-
-	# Enclave store storage operation
-	rm -rf integrity-enc-store-storage/
-	mkdir -p integrity-enc-store-storage/
-	time uclid -g integrity-enc-store-storage/store-storage --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_e_store_storage_next)
-	./run_all_smt.sh integrity-enc-store-storage 10
-
-	# Enclave load storage operation
-	rm -rf integrity-enc-load-storage/
-	mkdir -p integrity-enc-load-storage/
-	time uclid -g integrity-enc-load-storage/load-storage --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_e_load_storage_next)
-	./run_all_smt.sh integrity-enc-load-storage 10
-
-	# Store storage operation
-	rm -rf integrity-adv-store-storage/
-	mkdir -p integrity-adv-store-storage/
-	time uclid -g integrity-adv-store-storage/store-storage --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_store_storage)
-	./run_all_smt.sh integrity-adv-store-storage 10
-
-	# Load storage operation
-	rm -rf integrity-adv-load-storage/
-	mkdir -p integrity-adv-load-storage/
-	time uclid -g integrity-adv-load-storage/load-storage --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_load_storage)
-	./run_all_smt.sh integrity-adv-load-storage 10
-
-	# Adversary get key and tag operation
-	rm -rf integrity-adv-get-key-and-tag/
-	mkdir -p integrity-adv-get-key-and-tag/
-	time uclid -g integrity-adv-get-key-and-tag/get-key-and-tag --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_get_key_and_tag)
-	./run_all_smt.sh integrity-adv-get-key-and-tag 10
-
-	# Adversary update tag operation
-	rm -rf integrity-adv-update-tag/
-	mkdir -p integrity-adv-update-tag/
-	time uclid -g integrity-adv-update-tag/update-tag --main integrity_proof $(PROOF_SOURCES) $(INTEGRITY_PROOF_adv_update_tag)
-	./run_all_smt.sh integrity-adv-update-tag 10
-
-
-# Stale
-mem-conf-proof:
-	uclid --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_complete)
-
-# Stale
-mem-conf-printed:
-	mkdir -p mem-conf
-	rm  -rf mem-conf-old
-	mv mem-conf mem-conf-old
-	mkdir mem-conf
-	uclid -g mem-conf/smt --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_complete)
-
-# Verifying
-mem-conf-case-split:
-	rm -rf verify_log
-
-	# Observer compute operation
-	rm -rf mem-conf-obs-compute
-	mkdir -p mem-conf-obs-compute
-	time uclid -g mem-conf-obs-compute/compute --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_compute)
-	./run_all_smt.sh mem-conf-obs-compute
-
-	# Enclave Compute operation
-	rm -rf mem-conf-e-compute
-	mkdir -p mem-conf-e-compute
-	time uclid -g mem-conf-e-compute/compute --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_e_compute_next)
-	./run_all_smt.sh mem-conf-e-compute
-
-	# Enclave exit operation
-	rm -rf mem-conf-e-exit
-	mkdir -p mem-conf-e-exit
-	time uclid -g mem-conf-e-exit/exit --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_e_exit_next)
-	./run_all_smt.sh mem-conf-e-exit
-
-	# Enclave pause operation
-	rm -rf mem-conf-e-pause
-	mkdir -p mem-conf-e-pause
-	time uclid -g mem-conf-e-pause/pause --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_e_pause_next)
-	./run_all_smt.sh mem-conf-e-pause
-
-	# Enclave snapshot operation
-	# rm -rf mem-conf-e-snapshot
-	# mkdir -p mem-conf-e-snapshot
-	# uclid -g mem-conf-e-snapshot/snapshot --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_e_snapshot_next)
-	# ./run_all_smt.sh mem-conf-e-snapshot
-
-	# Observer block operation
-	rm -rf mem-conf-obs-block
-	mkdir -p mem-conf-obs-block
-	time uclid -g mem-conf-obs-block/block --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_block)
-	./run_all_smt.sh mem-conf-obs-block
-
-	# Clone operation
-	# rm -rf mem-conf-obs-clone/
-	# mkdir -p mem-conf-obs-clone/
-	# time uclid -g mem-conf-obs-clone/clone --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_clone)
-	# ./run_all_smt.sh mem-conf-obs-clone
-
-	# Observer destroy operation
-	rm -rf mem-conf-obs-destroy
-	mkdir -p mem-conf-obs-destroy
-	time uclid -g mem-conf-obs-destroy/destroy --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_destroy)
-	./run_all_smt.sh mem-conf-obs-destroy
-
-	# Observer enter operation
-	rm -rf mem-conf-obs-enter
-	mkdir -p mem-conf-obs-enter
-	time uclid -g mem-conf-obs-enter/enter --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_enter)
-	./run_all_smt.sh mem-conf-obs-enter
-
-	# Observer exit operation
-	rm -rf mem-conf-obs-exit
-	mkdir -p mem-conf-obs-exit
-	time uclid -g mem-conf-obs-exit/exit --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_exit)
-	./run_all_smt.sh mem-conf-obs-exit
-
-	# Observer snapshot operation
-	# rm -rf mem-conf-obs-snapshot
-	# mkdir -p mem-conf-obs-snapshot
-	# uclid -g mem-conf-obs-snapshot/snapshot --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_snapshot)
-	# ./run_all_smt.sh mem-conf-obs-snapshot
-
-	# Observer launch operation
-	rm -rf mem-conf-obs-launch
-	mkdir -p mem-conf-obs-launch
-	time uclid -g mem-conf-obs-launch/launch --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_launch)
-	./run_all_smt.sh mem-conf-obs-launch
-
-	# Observer pause operation
-	rm -rf mem-conf-obs-pause
-	mkdir -p mem-conf-obs-pause
-	time uclid -g mem-conf-obs-pause/pause --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_pause)
-	./run_all_smt.sh mem-conf-obs-pause
-
-	# Observer release operation
-	rm -rf mem-conf-obs-release
-	mkdir -p mem-conf-obs-release
-	time uclid -g mem-conf-obs-release/release --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_release)
-	./run_all_smt.sh mem-conf-obs-release
-
-	# Observer resume operation
-	rm -rf mem-conf-obs-resume
-	mkdir -p mem-conf-obs-resume
-	time uclid -g mem-conf-obs-resume/resume --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_resume)
-	./run_all_smt.sh mem-conf-obs-resume
-
-
-mem-conf-case-split-new:
-	rm -rf verify_log_new
-
-	# Observer create key operation
-	rm -rf mem-conf-obs-create-key
-	mkdir -p mem-conf-obs-create-key
-	time uclid -g mem-conf-obs-create-key/create-key --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_create_key)
-	./run_all_smt.sh mem-conf-obs-create-key 10
-
-	# Observer delete key operation
-	rm -rf mem-conf-obs-delete-key
-	mkdir -p mem-conf-obs-delete-key
-	time uclid -g mem-conf-obs-delete-key/delete-key --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_delete_key)
-	./run_all_smt.sh mem-conf-obs-delete-key 10
-
-	# Observer tamper storage operation
-	rm -rf mem-conf-obs-tamper-storage
-	mkdir -p mem-conf-obs-tamper-storage
-	time uclid -g mem-conf-obs-tamper-storage/tamper-storage --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_tamper_storage)
-	./run_all_smt.sh mem-conf-obs-tamper-storage 10
-
-	# Observer replay storage operation
-	rm -rf mem-conf-obs-replay-storage
-	mkdir -p mem-conf-obs-replay-storage
-	time uclid -g mem-conf-obs-replay-storage/replay-storage --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_replay_storage)
-	./run_all_smt.sh mem-conf-obs-replay-storage 10
-
-	# Observer get key and tag operation
-	rm -rf mem-conf-obs-get-key-and-tag
-	mkdir -p mem-conf-obs-get-key-and-tag
-	time uclid -g mem-conf-obs-get-key-and-tag/get-key-and-tag --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_get_key_and_tag)
-	./run_all_smt.sh mem-conf-obs-get-key-and-tag 10
-
-	# Observer update tag operation
-	rm -rf mem-conf-obs-update-tag
-	mkdir -p mem-conf-obs-update-tag
-	time uclid -g mem-conf-obs-update-tag/update-tag --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_update_tag)
-	./run_all_smt.sh mem-conf-obs-update-tag 10
-
-	# Enclave get key and tag operation
-	rm -rf mem-conf-e-get-key-and-tag
-	mkdir -p mem-conf-e-get-key-and-tag
-	time uclid -g mem-conf-e-get-key-and-tag/get-key-and-tag --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_e_get_key_and_tag_next)
-	./run_all_smt.sh mem-conf-e-get-key-and-tag 10
-
-	# Enclave update tag operation
-	rm -rf mem-conf-e-update-tag
-	mkdir -p mem-conf-e-update-tag
-	time uclid -g mem-conf-e-update-tag/update-tag --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_e_update_tag_next)
-	./run_all_smt.sh mem-conf-e-update-tag 10
-
-	# Enclave store storage operation
-	rm -rf mem-conf-e-store-storage
-	mkdir -p mem-conf-e-store-storage
-	time uclid -g mem-conf-e-store-storage/store-storage --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_e_store_storage_next)
-	./run_all_smt.sh mem-conf-e-store-storage 10
-
-	# Enclave load storage operation
-	rm -rf mem-conf-e-load-storage
-	mkdir -p mem-conf-e-load-storage
-	time uclid -g mem-conf-e-load-storage/load-storage --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_e_load_storage_next)
-	./run_all_smt.sh mem-conf-e-load-storage 10
-
-	# Observer store storage operation
-	rm -rf mem-conf-obs-store-storage
-	mkdir -p mem-conf-obs-store-storage
-	time uclid -g mem-conf-obs-store-storage/store-storage --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_store_storage)
-	./run_all_smt.sh mem-conf-obs-store-storage 10
-
-	# Observer load storage operation
-	rm -rf mem-conf-obs-load-storage
-	mkdir -p mem-conf-obs-load-storage
-	time uclid -g mem-conf-obs-load-storage/load-storage --main mem_confidentiality_proof $(PROOF_SOURCES) $(MEM_CONF_PROOF_obs_load_storage)
-	./run_all_smt.sh mem-conf-obs-load-storage 10
-
-pt-conf-proof:
-	uclid --main pt_confidentiality_proof $(PROOF_SOURCES) $(PT_CONF_PROOF_complete)
-pt-conf-printed:
-	mkdir -p pt-conf
-	rm  -rf pt-conf-old
-	mv pt-conf pt-conf-old
-	mkdir pt-conf
-	uclid -g pt-conf/smt --main pt_confidentiality_proof $(PROOF_SOURCES) $(PT_CONF_PROOF_complete)
-pt-conf-case-split:
-	uclid --main pt_confidentiality_proof $(PROOF_SOURCES) $(PT_CONF_PROOF_e_compute)
-	uclid --main pt_confidentiality_proof $(PROOF_SOURCES) $(PT_CONF_PROOF_e_exit)
-	uclid --main pt_confidentiality_proof $(PROOF_SOURCES) $(PT_CONF_PROOF_e_pause)
-	uclid --main pt_confidentiality_proof $(PROOF_SOURCES) $(PT_CONF_PROOF_obs_block)
-	uclid --main pt_confidentiality_proof $(PROOF_SOURCES) $(PT_CONF_PROOF_obs_compute)
-	uclid --main pt_confidentiality_proof $(PROOF_SOURCES) $(PT_CONF_PROOF_obs_destroy)
-	uclid --main pt_confidentiality_proof $(PROOF_SOURCES) $(PT_CONF_PROOF_obs_enter)
-	uclid --main pt_confidentiality_proof $(PROOF_SOURCES) $(PT_CONF_PROOF_obs_exit)
-	uclid --main pt_confidentiality_proof $(PROOF_SOURCES) $(PT_CONF_PROOF_obs_launch)
-	uclid --main pt_confidentiality_proof $(PROOF_SOURCES) $(PT_CONF_PROOF_obs_pause)
-	uclid --main pt_confidentiality_proof $(PROOF_SOURCES) $(PT_CONF_PROOF_obs_release)
-	uclid --main pt_confidentiality_proof $(PROOF_SOURCES) $(PT_CONF_PROOF_obs_resume)
-
-cache-conf-proof:
-	uclid --main cache_confidentiality_proof $(PROOF_SOURCES) $(CACHE_CONF_PROOF_complete)
-cache-conf-printed:
-	mkdir -p cache-conf
-	rm  -rf cache-conf-old
-	mv cache-conf cache-conf-old
-	mkdir cache-conf
-	uclid -g cache-conf/smt --main cache_confidentiality_proof $(PROOF_SOURCES) $(CACHE_CONF_PROOF_complete)
-cache-conf-case-split:
-	uclid --main cache_confidentiality_proof $(PROOF_SOURCES) $(CACHE_CONF_PROOF_e_compute)
-	uclid --main cache_confidentiality_proof $(PROOF_SOURCES) $(CACHE_CONF_PROOF_e_exit)
-	uclid --main cache_confidentiality_proof $(PROOF_SOURCES) $(CACHE_CONF_PROOF_e_pause)
-	uclid --main cache_confidentiality_proof $(PROOF_SOURCES) $(CACHE_CONF_PROOF_obs_block)
-	uclid --main cache_confidentiality_proof $(PROOF_SOURCES) $(CACHE_CONF_PROOF_obs_compute)
-	uclid --main cache_confidentiality_proof $(PROOF_SOURCES) $(CACHE_CONF_PROOF_obs_destroy)
-	uclid --main cache_confidentiality_proof $(PROOF_SOURCES) $(CACHE_CONF_PROOF_obs_enter)
-	uclid --main cache_confidentiality_proof $(PROOF_SOURCES) $(CACHE_CONF_PROOF_obs_exit)
-	uclid --main cache_confidentiality_proof $(PROOF_SOURCES) $(CACHE_CONF_PROOF_obs_launch)
-	uclid --main cache_confidentiality_proof $(PROOF_SOURCES) $(CACHE_CONF_PROOF_obs_pause)
-	uclid --main cache_confidentiality_proof $(PROOF_SOURCES) $(CACHE_CONF_PROOF_obs_release)
-	uclid --main cache_confidentiality_proof $(PROOF_SOURCES) $(CACHE_CONF_PROOF_obs_resume)
+# Per-solver budget handed to run_all_smt.sh, which fans the obligations of a
+# split out across a portfolio (cvc5 under several quantifier configurations,
+# and z3) and writes results.csv.  A portfolio matters: some obligations are
+# closed only by --enum-inst or by z3.
+TIMEOUT ?= 60
+# Solver processes per split.  `make -jN` runs N splits at once, so the product
+# N x JOBS is what lands on the CPU; keep it at or below `nproc`.
+JOBS    ?= 8
+GEN     := gen-chk
+
+#---------------------------------------------------------------------------#
+# Sources                                                                    #
+#---------------------------------------------------------------------------#
+MODULES  = ./../modules
+INTG_DIR = $(MODULES)/tap-mod-integrity
+CONF_DIR = $(MODULES)/tap-mod-conf
+
+CPU_SOURCES = ../../Common/common-types.ucl $(MODULES)/ap-types.ucl \
+              $(MODULES)/tap-mod-cache.ucl $(MODULES)/tap-mod-cpu.ucl
+
+# Base TAP operations.
+TAP_OP_SOURCE  = $(MODULES)/tap-mod-destroy.ucl $(MODULES)/tap-mod-enter.ucl \
+                 $(MODULES)/tap-mod-exit.ucl $(MODULES)/tap-mod-launch.ucl \
+                 $(MODULES)/tap-mod-pause.ucl $(MODULES)/tap-mod-resume.ucl \
+                 $(MODULES)/tap-mod-block-memory-region.ucl \
+                 $(MODULES)/tap-mod-release-memory-region.ucl
+# TAP-cloud operations: persistent storage and the KMS.
+TAP_OP_SOURCE += $(MODULES)/tap-mod-load-storage.ucl $(MODULES)/tap-mod-store-storage.ucl \
+                 $(MODULES)/tap-mod-kms.ucl $(MODULES)/tap-mod-tamper-storage.ucl \
+                 $(MODULES)/tap-mod-replay-storage.ucl
+
+PROOF_SOURCES = $(CPU_SOURCES) $(TAP_OP_SOURCE) $(MODULES)/tap-mod.ucl ./proof-common.ucl
+
+# An enclave-step split pairs with a stub init (the adversary step is not taken);
+# an adversary-step split pairs with the real init.
+INTEGRITY_NEXT = ./integrity-proof.ucl ./integrity-proof-init-stub.ucl \
+                 ./integrity-proof-next.ucl $(MODULES)/tap-mod-integrity.ucl
+INTEGRITY_FULL = ./integrity-proof.ucl ./integrity-proof-init.ucl \
+                 ./integrity-proof-next.ucl $(MODULES)/tap-mod-integrity.ucl
+MEM_CONF_NEXT  = $(MODULES)/tap-mod-conf.ucl ./mem-conf-proof.ucl ./mem-conf-proof-init-stub.ucl
+MEM_CONF_FULL  = $(MODULES)/tap-mod-conf.ucl ./mem-conf-proof.ucl ./mem-conf-proof-init.ucl
+
+MEASUREMENT = $(MODULES)/measure.ucl ./measurement-proof.ucl
+
+#---------------------------------------------------------------------------#
+# Case splits                                                               #
+#---------------------------------------------------------------------------#
+INTEGRITY_BASE  = enc-compute enc-exit enc-pause \
+                  adv-launch adv-destroy adv-enter adv-exit adv-pause adv-resume \
+                  adv-block adv-release adv-compute
+INTEGRITY_CLOUD = enc-store enc-load enc-getkeytag enc-updatetag \
+                  adv-createkey adv-deletekey adv-tamper adv-replay \
+                  adv-store adv-load adv-getkeytag adv-updatetag
+CONF_BASE       = e-compute e-exit e-pause \
+                  block compute destroy enter exit launch pause release resume
+CONF_CLOUD      = e-store e-load e-getkeytag e-updatetag \
+                  create-key delete-key load-storage store-storage \
+                  tamper-storage replay-storage get-key-and-tag update-tag
+
+#--- integrity: enclave-step splits (full adversary step, stub init) ---#
+FILES_integrity_enc-compute = $(INTG_DIR)/e-compute.ucl $(INTG_DIR)/full-adv-step.ucl $(INTEGRITY_NEXT)
+FILES_integrity_enc-exit = $(INTG_DIR)/e-exit.ucl $(INTG_DIR)/full-adv-step.ucl $(INTEGRITY_NEXT)
+FILES_integrity_enc-pause = $(INTG_DIR)/e-pause.ucl $(INTG_DIR)/full-adv-step.ucl $(INTEGRITY_NEXT)
+FILES_integrity_enc-store = $(INTG_DIR)/e-store-storage.ucl $(INTG_DIR)/full-adv-step.ucl $(INTEGRITY_NEXT)
+FILES_integrity_enc-load = $(INTG_DIR)/e-load-storage.ucl $(INTG_DIR)/full-adv-step.ucl $(INTEGRITY_NEXT)
+FILES_integrity_enc-getkeytag = $(INTG_DIR)/e-get-key-and-tag.ucl $(INTG_DIR)/full-adv-step.ucl $(INTEGRITY_NEXT)
+FILES_integrity_enc-updatetag = $(INTG_DIR)/e-update-tag.ucl $(INTG_DIR)/full-adv-step.ucl $(INTEGRITY_NEXT)
+
+#--- integrity: adversary-step splits (full enclave step, real init) ---#
+FILES_integrity_adv-launch = $(INTG_DIR)/adv-launch.ucl $(INTG_DIR)/full-enc-step.ucl $(INTEGRITY_FULL)
+FILES_integrity_adv-destroy = $(INTG_DIR)/adv-destroy.ucl $(INTG_DIR)/full-enc-step.ucl $(INTEGRITY_FULL)
+FILES_integrity_adv-enter = $(INTG_DIR)/adv-enter.ucl $(INTG_DIR)/full-enc-step.ucl $(INTEGRITY_FULL)
+FILES_integrity_adv-exit = $(INTG_DIR)/adv-exit.ucl $(INTG_DIR)/full-enc-step.ucl $(INTEGRITY_FULL)
+FILES_integrity_adv-pause = $(INTG_DIR)/adv-pause.ucl $(INTG_DIR)/full-enc-step.ucl $(INTEGRITY_FULL)
+FILES_integrity_adv-resume = $(INTG_DIR)/adv-resume.ucl $(INTG_DIR)/full-enc-step.ucl $(INTEGRITY_FULL)
+FILES_integrity_adv-block = $(INTG_DIR)/adv-block.ucl $(INTG_DIR)/full-enc-step.ucl $(INTEGRITY_FULL)
+FILES_integrity_adv-release = $(INTG_DIR)/adv-release.ucl $(INTG_DIR)/full-enc-step.ucl $(INTEGRITY_FULL)
+FILES_integrity_adv-compute = $(INTG_DIR)/adv-compute.ucl $(INTG_DIR)/full-enc-step.ucl $(INTEGRITY_FULL)
+FILES_integrity_adv-createkey = $(INTG_DIR)/adv-create-key.ucl $(INTG_DIR)/full-enc-step.ucl $(INTEGRITY_FULL)
+FILES_integrity_adv-deletekey = $(INTG_DIR)/adv-delete-key.ucl $(INTG_DIR)/full-enc-step.ucl $(INTEGRITY_FULL)
+FILES_integrity_adv-tamper = $(INTG_DIR)/adv-tamper-storage.ucl $(INTG_DIR)/full-enc-step.ucl $(INTEGRITY_FULL)
+FILES_integrity_adv-replay = $(INTG_DIR)/adv-replay-storage.ucl $(INTG_DIR)/full-enc-step.ucl $(INTEGRITY_FULL)
+FILES_integrity_adv-store = $(INTG_DIR)/adv-store-storage.ucl $(INTG_DIR)/full-enc-step.ucl $(INTEGRITY_FULL)
+FILES_integrity_adv-load = $(INTG_DIR)/adv-load-storage.ucl $(INTG_DIR)/full-enc-step.ucl $(INTEGRITY_FULL)
+FILES_integrity_adv-getkeytag = $(INTG_DIR)/adv-get-key-and-tag.ucl $(INTG_DIR)/full-enc-step.ucl $(INTEGRITY_FULL)
+FILES_integrity_adv-updatetag = $(INTG_DIR)/adv-update-tag.ucl $(INTG_DIR)/full-enc-step.ucl $(INTEGRITY_FULL)
+
+#--- confidentiality: enclave-step splits (full observer step, stub init) ---#
+FILES_conf_e-compute = $(CONF_DIR)/e-compute.ucl $(CONF_DIR)/full-obs-step.ucl $(MEM_CONF_NEXT)
+FILES_conf_e-exit = $(CONF_DIR)/e-exit.ucl $(CONF_DIR)/full-obs-step.ucl $(MEM_CONF_NEXT)
+FILES_conf_e-pause = $(CONF_DIR)/e-pause.ucl $(CONF_DIR)/full-obs-step.ucl $(MEM_CONF_NEXT)
+FILES_conf_e-store = $(CONF_DIR)/e-store-storage.ucl $(CONF_DIR)/full-obs-step.ucl $(MEM_CONF_NEXT)
+FILES_conf_e-load = $(CONF_DIR)/e-load-storage.ucl $(CONF_DIR)/full-obs-step.ucl $(MEM_CONF_NEXT)
+FILES_conf_e-getkeytag = $(CONF_DIR)/e-get-key-and-tag.ucl $(CONF_DIR)/full-obs-step.ucl $(MEM_CONF_NEXT)
+FILES_conf_e-updatetag = $(CONF_DIR)/e-update-tag.ucl $(CONF_DIR)/full-obs-step.ucl $(MEM_CONF_NEXT)
+
+#--- confidentiality: observer-step splits (full enclave step, real init) ---#
+FILES_conf_block = $(CONF_DIR)/obs-block.ucl $(CONF_DIR)/full-enc-step.ucl $(MEM_CONF_FULL)
+FILES_conf_compute = $(CONF_DIR)/obs-compute.ucl $(CONF_DIR)/full-enc-step.ucl $(MEM_CONF_FULL)
+FILES_conf_create-key = $(CONF_DIR)/obs-create-key.ucl $(CONF_DIR)/full-enc-step.ucl $(MEM_CONF_FULL)
+FILES_conf_delete-key = $(CONF_DIR)/obs-delete-key.ucl $(CONF_DIR)/full-enc-step.ucl $(MEM_CONF_FULL)
+FILES_conf_destroy = $(CONF_DIR)/obs-destroy.ucl $(CONF_DIR)/full-enc-step.ucl $(MEM_CONF_FULL)
+FILES_conf_enter = $(CONF_DIR)/obs-enter.ucl $(CONF_DIR)/full-enc-step.ucl $(MEM_CONF_FULL)
+FILES_conf_exit = $(CONF_DIR)/obs-exit.ucl $(CONF_DIR)/full-enc-step.ucl $(MEM_CONF_FULL)
+FILES_conf_launch = $(CONF_DIR)/obs-launch.ucl $(CONF_DIR)/full-enc-step.ucl $(MEM_CONF_FULL)
+FILES_conf_load-storage = $(CONF_DIR)/obs-load-storage.ucl $(CONF_DIR)/full-enc-step.ucl $(MEM_CONF_FULL)
+FILES_conf_pause = $(CONF_DIR)/obs-pause.ucl $(CONF_DIR)/full-enc-step.ucl $(MEM_CONF_FULL)
+FILES_conf_release = $(CONF_DIR)/obs-release.ucl $(CONF_DIR)/full-enc-step.ucl $(MEM_CONF_FULL)
+FILES_conf_resume = $(CONF_DIR)/obs-resume.ucl $(CONF_DIR)/full-enc-step.ucl $(MEM_CONF_FULL)
+FILES_conf_store-storage = $(CONF_DIR)/obs-store-storage.ucl $(CONF_DIR)/full-enc-step.ucl $(MEM_CONF_FULL)
+FILES_conf_tamper-storage = $(CONF_DIR)/obs-tamper-storage.ucl $(CONF_DIR)/full-enc-step.ucl $(MEM_CONF_FULL)
+FILES_conf_replay-storage = $(CONF_DIR)/obs-replay-storage.ucl $(CONF_DIR)/full-enc-step.ucl $(MEM_CONF_FULL)
+FILES_conf_get-key-and-tag = $(CONF_DIR)/obs-get-key-and-tag.ucl $(CONF_DIR)/full-enc-step.ucl $(MEM_CONF_FULL)
+FILES_conf_update-tag = $(CONF_DIR)/obs-update-tag.ucl $(CONF_DIR)/full-enc-step.ucl $(MEM_CONF_FULL)
+
+#---------------------------------------------------------------------------#
+# One case split: generate, then solve every obligation in parallel.         #
+#   $(1) proof (integrity|conf)   $(2) uclid main module   $(3) split name   #
+#---------------------------------------------------------------------------#
+define check_split
+	dir=$(GEN)/$(1)-$(3)
+	mkdir -p $(GEN)
+	rm -rf $$dir && mkdir -p $$dir
+	if ! uclid -g $$dir/x --main $(2) $(PROOF_SOURCES) $(FILES_$(1)_$(3)) > $$dir/gen.log 2>&1; then
+	  printf '  %-22s GENERATION FAILED -- see %s/gen.log\n' '$(3)' "$$dir"
+	  exit 1
+	fi
+	n=$$(ls $$dir/*.smt 2>/dev/null | wc -l)
+	if [ "$$n" -eq 0 ]; then
+	  printf '  %-22s NO OBLIGATIONS GENERATED\n' '$(3)'
+	  exit 1
+	fi
+	./run_all_smt.sh $$dir $(TIMEOUT) $(JOBS) > $$dir/solve.log 2>&1
+	bad=$$(python3 -c "import csv;print(sum(1 for r in csv.DictReader(open('$$dir/results.csv')) if r['result']!='unsat'))")
+	if [ "$$bad" -eq 0 ]; then
+	  printf '  %-22s %5d unsat\n' '$(3)' "$$n"
+	else
+	  printf '  %-22s %5d obligations, %d NOT unsat\n' '$(3)' "$$n" "$$bad"
+	  exit 1
+	fi
+endef
+
+check-integrity-%: ; @$(call check_split,integrity,integrity_proof,$*)
+check-conf-%:      ; @$(call check_split,conf,mem_confidentiality_proof,$*)
+
+#---------------------------------------------------------------------------#
+# Groups                                                                     #
+#---------------------------------------------------------------------------#
+integrity-base:  ; @echo "=== integrity / base ==="  ; $(MAKE) -s $(addprefix check-integrity-,$(INTEGRITY_BASE))
+integrity-cloud: ; @echo "=== integrity / cloud ===" ; $(MAKE) -s $(addprefix check-integrity-,$(INTEGRITY_CLOUD))
+integrity-all:   ; @echo "=== integrity / all ==="   ; $(MAKE) -s $(addprefix check-integrity-,$(INTEGRITY_BASE) $(INTEGRITY_CLOUD))
+
+conf-base:  ; @echo "=== confidentiality / base ==="  ; $(MAKE) -s $(addprefix check-conf-,$(CONF_BASE))
+conf-cloud: ; @echo "=== confidentiality / cloud ===" ; $(MAKE) -s $(addprefix check-conf-,$(CONF_CLOUD))
+conf-all:   ; @echo "=== confidentiality / all ==="   ; $(MAKE) -s $(addprefix check-conf-,$(CONF_BASE) $(CONF_CLOUD))
+
+# Measurement is a single proof rather than a case split, but is checked the
+# same way: emit the obligations, then solve them in parallel.
+measurement:
+	@echo "=== measurement ==="
+	dir=$(GEN)/measurement
+	mkdir -p $(GEN)
+	rm -rf $$dir && mkdir -p $$dir
+	if ! uclid -g $$dir/x --main measurement_proof $(PROOF_SOURCES) $(MEASUREMENT) > $$dir/gen.log 2>&1; then
+	  echo "  GENERATION FAILED -- see $$dir/gen.log"; exit 1
+	fi
+	n=$$(ls $$dir/*.smt | wc -l)
+	./run_all_smt.sh $$dir $(TIMEOUT) $(JOBS) > $$dir/solve.log 2>&1
+	bad=$$(python3 -c "import csv;print(sum(1 for r in csv.DictReader(open('$$dir/results.csv')) if r['result']!='unsat'))")
+	if [ "$$bad" -eq 0 ]; then printf '  %-22s %5d unsat\n' measurement "$$n"
+	else printf '  %-22s %5d obligations, %d NOT unsat\n' measurement "$$n" "$$bad"; exit 1; fi
+
+check-all: measurement integrity-all conf-all
+
+help:
+	@echo "Case-split checks (regenerate, solve in parallel, non-zero exit on failure):"
+	@echo "  integrity-base   integrity-cloud   integrity-all"
+	@echo "  conf-base        conf-cloud        conf-all"
+	@echo "  measurement"
+	@echo "  check-all        all of the above"
+	@echo
+	@echo "  TIMEOUT=<s>  per-solver budget       (default $(TIMEOUT))"
+	@echo "  JOBS=<n>     solvers per split        (default $(JOBS))"
+	@echo "  make -jN     runs splits concurrently"
 
 clean:
-	rm -rf verify_log
-	rm -rf measurement
-	rm -rf measurement-old
-	rm -rf integrity
-	rm -rf integrity-enc-compute
-	rm -rf integrity-enc-exit
-	rm -rf integrity-enc-pause
-	rm -rf integrity-enc-load-storage
-	rm -rf integrity-enc-store-storage
-	rm -rf integrity-adv-launch
-	rm -rf integrity-adv-block
-	rm -rf integrity-adv-compute
-	rm -rf integrity-adv-destroy
-	rm -rf integrity-adv-enter
-	rm -rf integrity-adv-exit
-	rm -rf integrity-adv-pause
-	rm -rf integrity-adv-release
-	rm -rf integrity-adv-resume
-	rm -rf integrity-adv-create-key
-	rm -rf integrity-adv-delete-key
-	rm -rf integrity-adv-tamper-storage
-	rm -rf integrity-adv-store-storage
-	rm -rf integrity-adv-load-storage
-	rm -rf mem-conf
-	rm -rf mem-conf-e-compute
-	rm -rf mem-conf-e-exit
-	rm -rf mem-conf-e-pause
-	rm -rf mem-conf-e-load-storage
-	rm -rf mem-conf-e-store-storage
-	rm -rf mem-conf-obs-block
-	rm -rf mem-conf-obs-compute
-	rm -rf mem-conf-obs-destroy
-	rm -rf mem-conf-obs-enter
-	rm -rf mem-conf-obs-exit
-	rm -rf mem-conf-obs-launch
-	rm -rf mem-conf-obs-pause
-	rm -rf mem-conf-obs-release
-	rm -rf mem-conf-obs-resume
-	rm -rf mem-conf-obs-create-key
-	rm -rf mem-conf-obs-delete-key
-	rm -rf mem-conf-obs-tamper-storage
-	rm -rf mem-conf-obs-load-storage
-	rm -rf mem-conf-obs-store-storage
-	rm -rf pt-conf
-	rm -rf cache-conf
+	rm -rf $(GEN)
+
+.PHONY: help check-all measurement clean \
+        integrity-base integrity-cloud integrity-all \
+        conf-base conf-cloud conf-all

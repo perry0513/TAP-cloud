@@ -1,19 +1,5 @@
 #!/bin/bash
-python3 ../scripts/run_smt_parallel.py $1 $2
-
-
-#for file in "$1"/*
-#do
-#    #echo "Trying to verify $file"
-#    output="$(z3 $file | head -n 1)"
-#    #output="$(cvc4 -q --lang smt2 --force-logic=ALL --incremental $file | head -n 1)"
-#    if [[ $output == "unsat" ]]; then
-#        echo "$file verified."
-#    elif [[ $output == "sat" ]]; then
-#        echo "$file failed to verified.........."
-#        echo "$file failed to verify" >> verify_log
-#    else
-#        echo "$file could not be solved********"
-#        echo "$file failed to verify" >> verify_log
-#    fi
-#done
+# run_all_smt.sh <DIRECTORY> [TIMEOUT_PER_SOLVER] [JOBS]
+# Solve every .smt file in DIRECTORY with the solver portfolio, JOBS at a time,
+# and write results.csv there.
+python3 ../scripts/run_smt_parallel.py "$@"

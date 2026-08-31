@@ -1,2 +1,3 @@
 AbstractPlatform/*/*/*.smt
 AbstractPlatform/*/*/*.csv
+gen-chk/
