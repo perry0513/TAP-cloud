@@ -157,7 +157,8 @@ define check_split
 	dir=$(GEN)/$(1)-$(3)
 	mkdir -p $(GEN)
 	rm -rf $$dir && mkdir -p $$dir
-	if ! uclid -g $$dir/x --main $(2) $(PROOF_SOURCES) $(FILES_$(1)_$(3)) > $$dir/gen.log 2>&1; then
+	if ! /usr/bin/time -f "%U %S" -o $$dir/gen.time \
+	     uclid -g $$dir/x --main $(2) $(PROOF_SOURCES) $(FILES_$(1)_$(3)) > $$dir/gen.log 2>&1; then
 	  printf '  %-22s GENERATION FAILED -- see %s/gen.log\n' '$(3)' "$$dir"
 	  exit 1
 	fi
@@ -197,7 +198,8 @@ measurement:
 	dir=$(GEN)/measurement
 	mkdir -p $(GEN)
 	rm -rf $$dir && mkdir -p $$dir
-	if ! uclid -g $$dir/x --main measurement_proof $(PROOF_SOURCES) $(MEASUREMENT) > $$dir/gen.log 2>&1; then
+	if ! /usr/bin/time -f "%U %S" -o $$dir/gen.time \
+	     uclid -g $$dir/x --main measurement_proof $(PROOF_SOURCES) $(MEASUREMENT) > $$dir/gen.log 2>&1; then
 	  echo "  GENERATION FAILED -- see $$dir/gen.log"; exit 1
 	fi
 	n=$$(ls $$dir/*.smt | wc -l)

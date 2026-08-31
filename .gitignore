@@ -3,3 +3,5 @@ AbstractPlatform/*/*/*.csv
 gen-chk/
 __pycache__/
 *.pyc
+AbstractPlatform/modules/smt/
+AbstractPlatform/modules/measure/
