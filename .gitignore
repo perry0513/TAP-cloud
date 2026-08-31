@@ -1,3 +1,5 @@
 AbstractPlatform/*/*/*.smt
 AbstractPlatform/*/*/*.csv
 gen-chk/
+__pycache__/
+*.pyc
