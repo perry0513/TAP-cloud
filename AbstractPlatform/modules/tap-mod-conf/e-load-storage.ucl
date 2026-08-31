@@ -27,7 +27,7 @@ module tap {
       // in enclave-mode:
       assume (op == tap_proof_op_load_storage);
 
-      call (status, abort) = load_storage_only();
+      call (status, abort) = load_storage();
       next_mode = mode_enclave;
   }
 

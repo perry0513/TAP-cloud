@@ -1195,11 +1195,11 @@ module tap {
           current_mode = mode_untrusted;
         }
         (op == tap_proof_op_store_storage) : {
-          call (status, abort) = store_storage_only();
+          call (status, abort) = store_storage();
           current_mode = mode_enclave;
         }
         (op == tap_proof_op_load_storage) : {
-          call (status, abort) = load_storage_only();
+          call (status, abort) = load_storage();
           current_mode = mode_enclave;
         }
         (op == tap_proof_op_update_tag) : {

@@ -184,10 +184,10 @@ module tap {
       // cpu_enclave_id becomes r_eid), so it gets the enclave's storage and KMS
       // instructions too -- in their granular form.
       (op == tap_proof_op_store_storage) : {
-          call (status, abort) = store_storage_only();
+          call (status, abort) = store_storage();
       }
       (op == tap_proof_op_load_storage) : {
-          call (status, abort) = load_storage_only();
+          call (status, abort) = load_storage();
       }
       (op == tap_proof_op_get_key_and_tag) : {
           call (status, abort) = get_key_and_tag();

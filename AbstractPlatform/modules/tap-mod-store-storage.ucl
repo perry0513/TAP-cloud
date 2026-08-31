@@ -209,7 +209,7 @@ procedure [noinline] _store_storage (store_vaddr : vaddr2bool_t)
   }
 }
 
-procedure [inline] store_storage_only ()
+procedure [inline] store_storage ()
   returns (status : enclave_op_result_t, abort : boolean)
   modifies cpu_regs;
   modifies cpu_pc;
@@ -279,61 +279,5 @@ procedure [inline] store_storage_only ()
       // assert cpu_owner_map[cpu_addr_map[cpu_pc]] == eid;
     }
   }
-}
-
-//
-// Utility function
-// Calls _store_storage with vaddr and size depending on cpu state
-//
-procedure [inline] store_storage ()
-  returns (status : enclave_op_result_t, abort : boolean)
-  modifies cpu_regs;
-  modifies cpu_pc;
-  modifies cpu_addr_valid;
-  modifies cache_valid_map;
-  modifies cache_tag_map;
-  modifies tap_enclave_metadata_addr_valid;
-  modifies tap_storage_mem;
-  modifies tap_storage_addr_valid;
-  modifies tap_storage_key;
-  modifies tap_storage_tag;
-  modifies tap_storage_produced;
-  modifies tap_storage_produced_key;
-  modifies tap_enclave_metadata_key;
-  modifies tap_enclave_metadata_tag;
-  modifies tap_kms_tag;
-{
-  var eid     : tap_enclave_id_t;
-
-  status = enclave_op_success;
-  abort = false;
-  eid = cpu_enclave_id;
-
-  // Get key and tag
-  call (status, abort) = get_key_and_tag();
-
-  // Store data
-  if (status != enclave_op_failed) {
-    assert (valid_key(tap_kms_key[eid]) && tap_enclave_metadata_valid[eid]);
-    call (status, abort) = store_storage_only();
-    assert (status == enclave_op_success);
-    assert (valid_tag(tap_enclave_metadata_tag[eid]));
-  }
-
-  // Update tag
-  if (status != enclave_op_failed) {
-    call (status, abort) = update_tag();
-    assert (status == enclave_op_success);
-    assert (valid_tag(tap_kms_tag[eid]));
-  }
-
-  assert (abort ==> status != enclave_op_success);
-  assert (valid_enclave_id(eid) &&
-          tap_enclave_metadata_valid[eid] &&
-          !valid_key(tap_kms_key[eid])) <==> abort;
-  assert (valid_enclave_id(eid) &&
-          tap_enclave_metadata_valid[eid] &&
-          valid_key(tap_kms_key[eid])) <==>
-            (status == enclave_op_success);
 }
 }

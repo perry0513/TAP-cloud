@@ -34,7 +34,7 @@ module tap {
       // in enclave-mode:
       assume (op == tap_proof_op_store_storage);
 
-      call (status, abort) = store_storage_only();
+      call (status, abort) = store_storage();
       // if (status == enclave_op_success) {
       //   // If success, overwrite the fresh entry so it is no longer tampered
       //   storage_tampered = false;

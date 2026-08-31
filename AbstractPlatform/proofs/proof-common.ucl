@@ -23,9 +23,8 @@ type phase_t = enum { ph_syncing, ph_active, ph_pending, ph_dead };
 // may run enclaves of its own: `enter(r_eid)` with `r_eid != eid` succeeds and
 // leaves `cpu_enclave_id == r_eid` while the proof stays in `mode_untrusted`.
 // So every operation an enclave can execute has to be available here too --
-// including the granular storage and KMS steps, which is why
-// `get_key_and_tag` and `update_tag` appear below and why the adversary's
-// store/load are the `_only` (non-fused) forms.
+// including `get_key_and_tag` and `update_tag`, which are separate steps from
+// storePS and loadPS rather than fused into them.
 define tap_proof_op_valid(o : tap_proof_op_t) : boolean
 = (o == tap_proof_op_compute)   ||
   (o == tap_proof_op_destroy)   || (o == tap_proof_op_enter)     ||

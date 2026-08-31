@@ -66,11 +66,11 @@ module tap {
           next_mode = mode_enclave;
         }
         (op == tap_proof_op_load_storage) : {
-          call (status, abort) = load_storage_only();
+          call (status, abort) = load_storage();
           next_mode = mode_enclave;
         }
         (op == tap_proof_op_store_storage) : {
-          call (status, abort) = store_storage_only();
+          call (status, abort) = store_storage();
           next_mode = mode_enclave;
         }
         (op == tap_proof_op_get_key_and_tag) : {
