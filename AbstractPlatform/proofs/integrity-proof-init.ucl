@@ -4,7 +4,6 @@ module integrity_proof {
 
     type create_enclave_op_t = enum {
         create_by_launch
-        // create_by_clone
     };
 
     //=============================================================================//
@@ -27,8 +26,6 @@ module integrity_proof {
         call cpu_1.InitOSMem(e_root_excl_map, e_container_data);
         call cpu_2.InitOSMem(e_root_excl_map, e_container_data);
 
-        // Create the enclave with `eid` in both traces and assume it was successful
-        // The enclave can either be launched or cloned
         case
           (create_op == create_by_launch) : {
             // Launch `eid` in trace 1
@@ -67,8 +64,6 @@ module integrity_proof {
             // The enclave has not yet written anything, so there is nothing to replay.
             assume (forall (tg : tag_t) :: !cpu_2.tap_storage_produced[eid][tg]);
           }
-          // (create_op == create_by_clone) : {
-          //   var parent_root_snapshot: tap_enclave_id_t;
 
           //   // Get the root snapshot of `eid`. This is either going to be `r_parent_eid`
           //   // if it's a snapshot or the root of `r_parent_eid`.
@@ -78,24 +73,12 @@ module integrity_proof {
           //                           then (cpu_1.tap_enclave_metadata_root_snapshot[r_parent_eid])
           //                           else tap_invalid_enc_id;
 
-          //   // Sanity check: the parent root snapshot should be a snapshot
-          //   assert (valid_enclave_id(parent_root_snapshot) ==>
-          //             cpu_1.tap_enclave_metadata_is_snapshot[parent_root_snapshot]);
 
-          //   // Assume the parent or root snapshot's memory ownership to be the same
-          //   assume (forall (p: wap_addr_t) :: (e_root_excl_map[p] <==>
-          //             ((cpu_1.cpu_owner_map[p] == parent_root_snapshot || cpu_1.cpu_owner_map[p] == r_parent_eid) &&
-          //              (cpu_2.cpu_owner_map[p] == parent_root_snapshot || cpu_2.cpu_owner_map[p] == r_parent_eid))));
 
-          //   // Assume the parent or root snapshot's memory to be the same
-          //   assume (valid_enclave_id(parent_root_snapshot) ==>
-          //             (forall (pa: wap_addr_t) :: (e_root_excl_map[pa] ==> cpu_1.cpu_mem[pa] == cpu_2.cpu_mem[pa])));
 
           //   // Assume that the parent is identical in both traces
           //   assume (tap_metadata_equal(r_parent_eid));
 
-          //   // If the parent has a root snapshot, it's also identical
-          //   assume (tap_metadata_equal(parent_root_snapshot));
 
           //   // The enclave in the parent traces owns PA defined by e_root_excl_map
           //   assume (forall (pa: wap_addr_t) ::
@@ -105,9 +88,6 @@ module integrity_proof {
           //                 ((cpu_2.cpu_owner_map[pa] == cpu_2.tap_enclave_metadata_root_snapshot[eid]) <==>
           //                   e_root_excl_map[pa]));
 
-          //   // Clone `eid` in trace 1
-          //   call (status) = cpu_1.clone(eid, r_parent_eid, e_excl_map);
-          //   assume status == enclave_op_success;
 
           //   // Clone `eid` in trace 2
           //   call (status) = cpu_2.clone(eid, r_parent_eid, e_excl_map);

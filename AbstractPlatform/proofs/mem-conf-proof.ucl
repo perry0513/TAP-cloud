@@ -186,10 +186,6 @@ module mem_confidentiality_proof {
       (cpu_1.tap_enclave_metadata_pc[e]            == cpu_2.tap_enclave_metadata_pc[e]) &&
       (cpu_1.tap_enclave_metadata_regs[e]          == cpu_2.tap_enclave_metadata_regs[e]) &&
       (cpu_1.tap_enclave_metadata_paused[e]        == cpu_2.tap_enclave_metadata_paused[e]); // &&
-      // (cpu_1.tap_enclave_metadata_is_snapshot[e]   == cpu_2.tap_enclave_metadata_is_snapshot[e]) &&
-      // (cpu_1.tap_enclave_metadata_child_count[e] > 0   <==> cpu_2.tap_enclave_metadata_child_count[e] > 0) &&
-      // (cpu_1.tap_enclave_metadata_root_snapshot[e] == cpu_2.tap_enclave_metadata_root_snapshot[e]) &&
-      // (cpu_1.tap_enclave_metadata_wap_addr_free[e] == cpu_2.tap_enclave_metadata_wap_addr_free[e]);
 
     //-------------------------------------------------------------------//
     // Memory confidentiality property                                   //
@@ -316,15 +312,7 @@ module mem_confidentiality_proof {
       (forall (p : wap_addr_t) ::
         ((cpu_2.cpu_owner_map[p] == eid) <==> e_excl_map[p]));
 
-    // [Trace 1] The cpu_owner_map and enclave `eid`'s root snapshot excl_map are consistent
-    // invariant inv20_root: (verif && !enclave_dead && valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid])) ==>
-    //                     (forall (pa: wap_addr_t) ::
-    //                       ((cpu_1.cpu_owner_map[pa] == cpu_1.tap_enclave_metadata_root_snapshot[eid]) <==> e_root_excl_map[pa]));
 
-    // [Trace 2] The cpu_owner_map and enclave `eid`'s root snapshot excl_map are consistent
-    // invariant inv21_root: (verif && !enclave_dead && valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[eid])) ==>
-    //                     (forall (pa: wap_addr_t) ::
-    //                       ((cpu_2.cpu_owner_map[pa] == cpu_2.tap_enclave_metadata_root_snapshot[eid]) <==> e_root_excl_map[pa]));
 
     // [Trace 1] `eid`'s mapped PA are the same as e_excl_map
     //
@@ -464,11 +452,6 @@ module mem_confidentiality_proof {
         (cpu_1.tap_enclave_metadata_valid[e] && cpu_2.tap_enclave_metadata_valid[e]) ==>
             (cpu_1.tap_enclave_metadata_paused[e] == cpu_2.tap_enclave_metadata_paused[e]));
 
-    // wap_addr_free is the same except for the eid
-    // invariant inv45: verif ==>
-    //   (forall (e : tap_enclave_id_t) ::
-    //     (cpu_1.tap_enclave_metadata_valid[e] && cpu_2.tap_enclave_metadata_valid[e] && e != eid) ==>
-    //         (cpu_1.tap_enclave_metadata_wap_addr_free[e] == cpu_2.tap_enclave_metadata_wap_addr_free[e]));
 
     //-------------------------------------------------------------------//
     // Cerberus invairants                                               //
@@ -490,13 +473,7 @@ module mem_confidentiality_proof {
                 (valid_enclave_id(e) && !cpu_2.tap_enclave_metadata_valid[e]) ==>
                     (cpu_2.cpu_owner_map[pa] != e));
 
-    // invariant b3: (!enclave_dead && verif) ==> (forall (pa: wap_addr_t, e : tap_enclave_id_t) ::
-    //             cpu_1.tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_1.cpu_owner_map[pa] == e);
-    // invariant b4: (!enclave_dead && verif) ==> (forall (pa: wap_addr_t, e : tap_enclave_id_t) ::
-    //             cpu_2.tap_enclave_metadata_wap_addr_free[e][pa] ==> cpu_2.cpu_owner_map[pa] == e);
 
-    // invariant b5: (!enclave_dead && verif) ==> (forall (e: tap_enclave_id_t) :: cpu_1.tap_enclave_metadata_child_count[e] >= 0);
-    // invariant b6: (!enclave_dead && verif) ==> (forall (e: tap_enclave_id_t) :: cpu_2.tap_enclave_metadata_child_count[e] >= 0);
 
     // The entrypoint is mapped by eid
     invariant cpu_entry_pt_mapped_1: (!enclave_dead && verif) ==>
@@ -507,10 +484,8 @@ module mem_confidentiality_proof {
     // The metadata entrypoints are owned by the eid itself
     invariant entry_pt_owned_metadata_1: (!enclave_dead && verif) ==>
       (cpu_1.cpu_owner_map[cpu_1.tap_enclave_metadata_addr_map[eid][cpu_1.tap_enclave_metadata_entrypoint[eid]]] == eid); // ||
-        // (valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid]) && cpu_1.tap_enclave_metadata_valid[cpu_1.tap_enclave_metadata_root_snapshot[eid]] && cpu_1.cpu_owner_map[cpu_1.tap_enclave_metadata_addr_map[eid][cpu_1.tap_enclave_metadata_entrypoint[eid]]] == cpu_1.tap_enclave_metadata_root_snapshot[eid]));
     invariant entry_pt_owned_metadata_2: (!enclave_dead && verif) ==>
       (cpu_2.cpu_owner_map[cpu_2.tap_enclave_metadata_addr_map[eid][cpu_2.tap_enclave_metadata_entrypoint[eid]]] == eid); // ||
-        // (valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[eid]) && cpu_2.tap_enclave_metadata_valid[cpu_2.tap_enclave_metadata_root_snapshot[eid]] && cpu_2.cpu_owner_map[cpu_2.tap_enclave_metadata_addr_map[eid][cpu_2.tap_enclave_metadata_entrypoint[eid]]] == cpu_2.tap_enclave_metadata_root_snapshot[eid]));
 
     // All exclusive addresses should be owned by the enclave itself or it's root
     invariant excl_addr_ownership_1:
@@ -518,13 +493,11 @@ module mem_confidentiality_proof {
         (forall (e: tap_enclave_id_t, va: vaddr_t) ::
           ((valid_enclave_id(e) && cpu_1.tap_enclave_metadata_valid[e] && cpu_1.tap_enclave_metadata_addr_excl[e][va]) ==>
             (cpu_1.cpu_owner_map[cpu_1.tap_enclave_metadata_addr_map[e][va]] == e))); // ||
-            //  (valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[e]) && cpu_1.tap_enclave_metadata_valid[cpu_1.tap_enclave_metadata_root_snapshot[e]] && cpu_1.cpu_owner_map[cpu_1.tap_enclave_metadata_addr_map[e][va]] == cpu_1.tap_enclave_metadata_root_snapshot[e]))));
     invariant excl_addr_ownership_2:
       verif ==>
         (forall (e: tap_enclave_id_t, va: vaddr_t) ::
           ((valid_enclave_id(e) && cpu_2.tap_enclave_metadata_valid[e] && cpu_2.tap_enclave_metadata_addr_excl[e][va]) ==>
             (cpu_2.cpu_owner_map[cpu_2.tap_enclave_metadata_addr_map[e][va]] == e))); // ||
-            //  (valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[e]) && cpu_2.tap_enclave_metadata_valid[cpu_2.tap_enclave_metadata_root_snapshot[e]] && cpu_2.cpu_owner_map[cpu_2.tap_enclave_metadata_addr_map[e][va]] == cpu_2.tap_enclave_metadata_root_snapshot[e]))));
 
     // Any root with a valid enclave index is an active and valid enclave
     // invariant valid_root_is_valid_1:
@@ -628,43 +601,15 @@ module mem_confidentiality_proof {
     //         valid_enclave_id(cpu_2.tap_enclave_metadata_root_snapshot[e]) ==>
     //         cpu_2.tap_enclave_metadata_is_snapshot[cpu_2.tap_enclave_metadata_root_snapshot[e]]));
 
-    // `eid` should never be a root. This is true if clone isn't callable on `eid`
-    // FIXME: Remove this and assume that if `eid` is copied, the enclave can't be read from?
-    // invariant eid_never_root: verif ==>
-    //   (forall (e: tap_enclave_id_t) ::
-    //     (cpu_1.tap_enclave_metadata_root_snapshot[e] != eid &&
-    //       cpu_2.tap_enclave_metadata_root_snapshot[e] != eid));
 
     //-------------------------------------------------------------------//
     // Invariants for case where `eid` has a root snapshot               //
     //-------------------------------------------------------------------//
 
-    // No one can run a snapshot enclave
-    // invariant cpu_never_snapshot: (!enclave_dead && verif) ==>
-    //   (!cpu_1.tap_enclave_metadata_is_snapshot[cpu_1.cpu_enclave_id] &&
-    //    !cpu_2.tap_enclave_metadata_is_snapshot[cpu_2.cpu_enclave_id]);
 
-    // Null enclave is never a snapshot
-    // invariant null_enc_never_snapshot: (verif) ==>
-    //   (!cpu_1.tap_enclave_metadata_is_snapshot[tap_null_enc_id] &&
-    //    !cpu_2.tap_enclave_metadata_is_snapshot[tap_null_enc_id]);
 
-    // Root snapshot stays the same
-    // invariant eid_root_equal: (!enclave_dead && verif) ==>
-    //   ((valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid]) && cpu_1.tap_enclave_metadata_valid[cpu_1.tap_enclave_metadata_root_snapshot[eid]]) ==>
-    //     tap_metadata_equal(cpu_1.tap_enclave_metadata_root_snapshot[eid]));
 
-    // If the enclave root snapshot is valid, then it's a snapshot
-    // invariant eid_root_is_snapshot: (!enclave_dead && verif) ==>
-    //   (valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid]) ==>
-    //     cpu_1.tap_enclave_metadata_is_snapshot[cpu_1.tap_enclave_metadata_root_snapshot[eid]]);
 
-    // Root snapshot memory stays the same
-    // invariant eid_root_mem_equal:
-    //   (!enclave_dead && verif && valid_enclave_id(cpu_1.tap_enclave_metadata_root_snapshot[eid])) ==>
-    //     (forall (pa: wap_addr_t) ::
-    //       (e_root_excl_map[pa] ==>
-    //         (cpu_1.cpu_mem[pa] == cpu_2.cpu_mem[pa])));
 
     //-------------------------------------------------------------------//
     // Same input variables                                              //
@@ -797,8 +742,6 @@ module mem_confidentiality_proof {
     // Assume that the enclave has access to only enclave operations.
     axiom tap_proof_op_valid_in_enclave(e_proof_op);
 
-    // CASE 1: Protected enclave `eid` is not cloned
-    // axiom r_parent_eid != eid && cpu_1.tap_r_parent_eid != eid && cpu_2.tap_r_parent_eid != eid;
 
     next {
       // Always verify the next block

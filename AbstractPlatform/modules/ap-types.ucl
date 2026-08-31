@@ -240,8 +240,6 @@ type tap_proof_op_t = enum {
   tap_proof_op_pause,
   tap_proof_op_compute,
   tap_proof_op_destroy,
-  // tap_proof_op_snapshot,
-  // tap_proof_op_clone,
   tap_proof_op_release,
   tap_proof_op_block,
   tap_proof_op_store_storage,
@@ -276,8 +274,6 @@ axiom (forall (w : word_t) :: valid_regindex(uf_cpu_r2_index(w)));
 // Returns the next free pa depending on the free map
 // function uf_next_free_pa(wap_addr_free: [wap_addr_t]boolean): wap_addr_t;
 
-// Returns the child count of an eid given the valid and root_snapshot metadata
-// function uf_child_count(eid: tap_enclave_id_t, tap_enclave_metadata_root_snapshot: tap_enclave_metadata_root_snapshot_t): integer;
 
 // Uninterpreted function to model deterministic selection of free memory
 // FIXME: Input should depend on more than just the VA
