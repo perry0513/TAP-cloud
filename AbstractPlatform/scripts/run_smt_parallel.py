@@ -32,15 +32,21 @@ SOLVER_CONFIG = {
     "z3": {
         "exe": "z3",
         "options": [
-            # "",
+            # An empty option string still has to be listed: the dispatcher
+            # iterates over `options`, so an empty list means the solver is
+            # never invoked.  z3 closes quantified goals that cvc5 does not --
+            # measurement-proof.ucl's cross-trace page-table invariant is one
+            # (z3: 0.5s; cvc5, with or without --enum-inst: unsolved at 400s).
+            "",
         ],
     }
 }
 
+# Defaults; both are overridable from the command line (see usage below).
 MAX_WORKERS = 8
 OUTPUT_CSV = "results.csv"
 PROGRESS_UPDATE_INTERVAL = 0.5
-TIMEOUT = 10  # seconds
+TIMEOUT = 10  # seconds, per solver
 
 # === Global lock and status tracking ===
 lock = Lock()
@@ -178,9 +184,11 @@ def main(directory):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python run_smt_parallel.py <DIRECTORY> [TIMEOUT_PER_SOLVER]")
+        print("Usage: python run_smt_parallel.py <DIRECTORY> [TIMEOUT_PER_SOLVER] [JOBS]")
         sys.exit(1)
-    if len(sys.argv) == 3:
+    if len(sys.argv) >= 3:
         TIMEOUT = int(sys.argv[2])
+    if len(sys.argv) >= 4:
+        MAX_WORKERS = int(sys.argv[3])
     main(sys.argv[1])
 
