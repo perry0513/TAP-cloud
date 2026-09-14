@@ -16,9 +16,9 @@ results.csv (per-obligation solver CPU time), both written by proofs/Makefile; t
 modules/smt/ from `make -C modules tap-smt`.  Verification time is the sum
 of the two, matching the paper's definition.
 
-    python3 scripts/get_total_time.py              # LaTeX table
-    python3 scripts/get_total_time.py --plain      # aligned text
-    python3 scripts/get_total_time.py --verbose    # per-file and per-split detail
+    python3 scripts/model_stats.py              # LaTeX table
+    python3 scripts/model_stats.py --plain      # aligned text
+    python3 scripts/model_stats.py --verbose    # per-file and per-split detail
 """
 
 import csv
@@ -175,7 +175,7 @@ def main(argv):
             print(f"# {label}")
             for f, a, b, c, d in per_file:
                 mark = "  (pr/ln excluded)" if f.name in SIZE_EXCLUDED else ""
-            print(f"#   {f.relative_to(ROOT.parent)!s:<58} pr={a:<3} fn={b:<3} an={c:<4} ln={d}{mark}")
+                print(f"#   {f.relative_to(ROOT.parent)!s:<58} pr={a:<3} fn={b:<3} an={c:<4} ln={d}{mark}")
             for name, g, s, k in per_dir:
                 print(f"#   {name:<58} gen={g:7.1f}s solve={s:8.1f}s obl={k}")
             if label in STEP_FILES:

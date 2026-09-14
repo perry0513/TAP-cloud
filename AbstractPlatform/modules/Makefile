@@ -31,7 +31,7 @@ JOBS    ?= 8
 tap:
 	uclid --main tap $(SOURCES)
 
-# gen.time and results.csv here feed scripts/get_total_time.py.
+# gen.time and results.csv here feed scripts/model_stats.py.
 tap-smt:
 	rm -rf smt && mkdir smt
 	/usr/bin/time -f "%U %S" -o smt/gen.time uclid -g smt/tap --main tap $(SOURCES)
