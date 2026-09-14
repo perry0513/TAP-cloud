@@ -44,6 +44,9 @@ module integrity_proof {
     // Scratch for the reference trace's discard at a destroy (see
     // integrity-proof-next.ucl).
     var discard_status        : enclave_op_result_t;
+    // Set by the next block exactly when a step *raises* abort while its
+    // pre-state carries no witness for it.  See `abort_attributable` below.
+    var abort_unattributed    : boolean;
 
 
 
@@ -130,6 +133,21 @@ module integrity_proof {
     define kms_storage_tag_sync() : boolean =
       (valid_tag(cpu_1.tap_kms_tag[eid]) &&
         cpu_1.tap_storage_tag[eid] == cpu_1.tap_kms_tag[eid]);
+
+    // What an adversary -- or a destroy inside the commit window -- can leave
+    // behind for the enclave to trip over: the KMS key is gone, storage is
+    // encrypted under a key the KMS no longer has, or storage is not the
+    // ciphertext the KMS has committed to.  Every abort in the model is one of
+    // these three; `abort_attributable` is what says so.
+    //
+    // Deliberately tighter than the disjunction the deleted `abort_implies_tamper`
+    // used.  That one read `!kms_storage_tag_sync()`, which is satisfied by
+    // `!valid_tag(kms_tag)` and so holds vacuously before the first commit; this
+    // asks for an actual disagreement.
+    define abort_witness() : boolean =
+      (!valid_key(cpu_1.tap_kms_key[eid])) ||
+      (cpu_1.tap_storage_key[eid] != cpu_1.tap_kms_key[eid]) ||
+      (cpu_1.tap_storage_tag[eid] != cpu_1.tap_kms_tag[eid]);
 
     //----------------------------------------------------------------------//
     // TAP invariants                                                       //
@@ -733,6 +751,37 @@ module integrity_proof {
           cpu_2.tap_current_mode == mode_untrusted);
 
     invariant trace_2_no_abort: verif ==> !enclave_abort_2;
+
+    // No step raises abort without a witness for it in that step's pre-state.
+    // This is what stops the model from being satisfied by an enclave that halts
+    // at every opportunity: without it, replacing any abort guard with `true`
+    // leaves every obligation in this proof unsat.
+    //
+    // The obligation is step-local because `enclave_abort` outlives its cause:
+    // once an abort is raised the adversary can `replay_storage` the committed
+    // tag (`committed_produced_1` puts it in the replay history) and restore
+    // storage/KMS agreement while the abort still stands.  That is why the state
+    // form -- `enclave_abort ==> ...`, the deleted `abort_implies_tamper` -- is
+    // not inductive, and it is the formulation rather than the claim that was
+    // wrong.  What it buys, read per operation and using invariants already
+    // above:
+    //
+    //   storePS    never aborts.  It requires `ph_active`, hence `key_fetched`
+    //              (`syncing_not_fetched_no_key`), hence a valid enclave key
+    //              (`enc_key_valid_1`); its abort branch is unreachable.
+    //   getKeyTag  aborts only when the KMS key has been deleted.
+    //   updateTag  `pending_chains_1` rules out the stale-chain disjunct, so only
+    //              a key the adversary deleted or replaced is left
+    //              (`enc_key_kms_1`).
+    //   loadPS     `synced_tag_1` and `client_key_1` reduce the mismatch to
+    //              `abort_witness()`.
+    //
+    // What it does not buy: `abort_witness()` is a state witness, not a causal
+    // attribution.  `storage_tag != kms_tag` is equally the signature of a
+    // rollback and of a destroy that landed inside the storePS/updateTag window
+    // of an earlier session.  Ruling out the second requires an obligation this
+    // proof does not have.
+    invariant abort_attributable: verif ==> !abort_unattributed;
 
     invariant key_deleted_implies_invalid:
       verif ==> (kms_key_deleted() <==> !valid_key(cpu_1.tap_kms_key[eid]));

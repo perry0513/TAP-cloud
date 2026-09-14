@@ -97,6 +97,12 @@ module integrity_proof {
     enclave_dead' = enclave_dead_1';
 
     enclave_abort' = enclave_abort_1';
+    // Did *this* step raise abort, and was there a witness for it beforehand?
+    // Everything but `enclave_abort_1'` is a pre-state value, so this reads "the
+    // abort raised here was attributable".  `!enclave_abort` is what makes it the
+    // raising step rather than every step after it: abort is absorbing until the
+    // enclave is destroyed or relaunched.
+    abort_unattributed' = (enclave_abort_1' && !enclave_abort && !abort_witness());
     kms_tampered' = kms_tampered_1';
     storage_tampered' = storage_tampered_1';
     status' = status_1';

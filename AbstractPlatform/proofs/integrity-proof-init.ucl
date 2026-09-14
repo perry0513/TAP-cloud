@@ -13,6 +13,7 @@ module integrity_proof {
         var status                        : enclave_op_result_t;
         var create_op                     : create_enclave_op_t;
 
+        abort_unattributed = false;
         // Enclave is assumed to be successfully created and hence not dead initially
         assume (!enclave_dead && !cpu_1.tap_enclave_dead && !cpu_2.tap_enclave_dead);
 
