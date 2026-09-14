@@ -24,34 +24,53 @@ from. `AbstractPlatform/proofs/regression/` holds a variant of the model in
 which tags certify position only; it is there to show which obligations the
 content-binding tags are actually carrying.
 
-The proof consists of four parts. Below are the commands to run each part:
+The proof consists of four parts. Every target below regenerates its SMT
+obligations with UCLID5 and discharges them through a solver portfolio; a target
+exits non-zero if any obligation comes back other than `unsat`. Two knobs are
+common to all of them: `TIMEOUT=<seconds>` is the per-solver budget (default 60)
+and `JOBS=<n>` the number of solver processes (default 8). The case-split
+targets are independent, so `make -jN` parallelises across them as well; a run
+uses about `N x JOBS` cores.
+
 1. To run procedural verification for each operation (procedure) in the formal model:
    ```bash
    cd AbstractPlatform/modules
-   make tap-printed
+   make tap-smt          # emit the obligations and solve them in parallel
    ```
+   `make tap` verifies the same contracts with UCLID5 driving the solver
+   in-process. That is a single process and needs several GB of memory; prefer
+   `tap-smt` unless you want UCLID5's own output.
 
 2. To run the secure measurement proof:
    ```bash
    cd AbstractPlatform/proofs
-   make measurement-proof-printed
+   make measurement
    ```
    Note that you can enable case splitting by uncommenting relevant lines in [measurement-proof.ucl](AbstractPlatform/proofs/measurement-proof.ucl) to speed up the proof.
 
 3. To run the integrity proof:
     ```bash
     cd AbstractPlatform/proofs
-    make integrity-case-split       # Checks the original operations in TAP
-    make integrity-case-split-new   # Checks the new operations introduced by STAP
+    make integrity-base     # Checks the original operations in TAP
+    make integrity-cloud    # Checks the new operations introduced by STAP
+    make integrity-all      # Both
     ```
-    `integrity-case-split-new` covers the granular KMS calls (`getKeyTag`,
-    `updateTag`) and the two operations that give the adversary its replay
-    archive (`archiveStorage`, `replayStorage`) alongside the storage operations.
+    `integrity-cloud` covers the granular KMS calls (`getKeyTag`, `updateTag`)
+    and the operation that gives the adversary its replay archive
+    (`replayStorage`) alongside the storage operations, in both the enclave-step
+    and the adversary-step splits.
 
 4. To run the confidentiality proof:
     ```bash
     cd AbstractPlatform/proofs
-    make mem-conf-case-split        # Checks the original operations in TAP
-    make mem-conf-case-split-new    # Checks the new operations introduced by STAP
+    make conf-base          # Checks the original operations in TAP
+    make conf-cloud         # Checks the new operations introduced by STAP
+    make conf-all           # Both
     ```
     Note that only memory confidentiality is proved in this work while cache and page-table confidentiality are not.
+
+`make check-all` in `AbstractPlatform/proofs` runs the measurement proof and
+both case-split proofs in one go. Generated artifacts land in
+`AbstractPlatform/proofs/gen-chk/<proof>-<split>/` -- the emitted SMT files, a
+`gen.log`, and a `results.csv` giving the result and solver for each obligation
+-- and `make clean` removes them. `make help` lists the targets.
