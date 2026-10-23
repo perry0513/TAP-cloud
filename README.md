@@ -93,8 +93,9 @@ all zero. Parts 2-4 print one summary line per split instead:
 
 A split that does not close reports `N obligations, M NOT unsat` on that line.
 With UCLID5 0.9.5 the obligation counts are 5535 for `tap-smt`, 30 for
-`measure`, 287 for `measurement`, 5704 for `integrity-all` and 5392 for
-`conf-all`.
+`measure`, 395 for `measurement`, 5704 for `integrity-all` and 5392 for
+`conf-all`. The `measurement` count is 287 obligations for
+`measurement_proof` plus part 1's 54, which UCLID5 emits twice.
 
 ## Model and Verification Statistics
 

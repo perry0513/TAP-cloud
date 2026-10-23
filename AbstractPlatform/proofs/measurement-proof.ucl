@@ -299,10 +299,10 @@ module measurement_proof {
         call (status_2) = cpu_2.create_key(eid_2);
         assume (status_2 == enclave_op_success);
         // Initally tag in kms is null
-        assume (!valid_tag(cpu_1.tap_kms_tag[eid_2]));
+        assume (!valid_tag(cpu_2.tap_kms_tag[eid_2]));
         // Initially storage is empty (both fresh and stale keys are invalid)
-        assume (!valid_key(cpu_1.tap_storage_key[eid_2]) &&
-                !valid_tag(cpu_1.tap_storage_tag[eid_2]));
+        assume (!valid_key(cpu_2.tap_storage_key[eid_2]) &&
+                !valid_tag(cpu_2.tap_storage_tag[eid_2]));
       }
 
       //   // Get the root snapshot of `eid`. This is either going to be `r_parent_eid`
@@ -912,7 +912,7 @@ module measurement_proof {
     set_solver_option(":threads", 4);
     set_solver_option(":blast_full", true);
 
-    // verif_measurement_proof_1 = verify(measurement_proof_part1);
+    verif_measurement_proof_1 = verify(measurement_proof_part1);
     // verif_measurement_proof_2 = verify(measurement_proof_part2);
     verif_measurement_proof = verify(measurement_proof);
     check;
